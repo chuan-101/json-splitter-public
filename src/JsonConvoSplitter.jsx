@@ -1,13 +1,38 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 
-export default function JsonConvoSplitter() {
+/**
+ * PublicJsonConvoExporter
+ * — A clean, public-friendly version of the JSON conversation splitter/exporter.
+ * Differences vs. the private build:
+ *   • Neutral speaker names (Assistant/User) with user-editable labels
+ *   • Optional nickname mapping by role
+ *   • Language toggle (简体中文 / English)
+ *   • Same minimal ZIP (store) writer, no dependencies
+ *   • Theme selector kept, hamster removed (but still cute ✨)
+ *   • Filename pattern customizable
+ */
+export default function PublicJsonConvoExporter() {
+  // ---------- UI State ----------
   const [convos, setConvos] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [query, setQuery] = useState("");
   const [dragging, setDragging] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(null);
   const [theme, setTheme] = useState("cream");
+  const [lang, setLang] = useState("zh"); // zh | en
 
+  // Display name mapping
+  const [roleNameUser, setRoleNameUser] = useState("User");
+  const [roleNameAssistant, setRoleNameAssistant] = useState("Assistant");
+  const [roleNameSystem, setRoleNameSystem] = useState("System");
+
+  // Filename controls
+  const [filePrefix, setFilePrefix] = useState("");
+  const [fileSuffix, setFileSuffix] = useState("");
+
+  const t = (k) => (translations[lang]?.[k] ?? k);
+
+  // ---------- Helpers ----------
   const safe = (s) => (s || "Untitled").replace(/[^0-9A-Za-z_\-\u4e00-\u9fa5]+/g, "_").slice(0, 80);
 
   const buildChain = (conv) => {
@@ -29,14 +54,21 @@ export default function JsonConvoSplitter() {
     return String(message.content);
   };
 
+  const roleDisplay = (role) => {
+    const r = (role || "assistant").toLowerCase();
+    if (r === "user") return roleNameUser;
+    if (r === "system") return roleNameSystem;
+    return roleNameAssistant; // assistant, tool, function → treat as assistant for display
+  };
+
   const toMarkdown = (conv) => {
     const chain = buildChain(conv);
     return chain
       .map((m) => {
         const role = m.author?.role || "assistant";
         const text = extractText(m);
-        const displayRole = role === "assistant" ? "Syzygy" : "串串";
-        return `**${displayRole.toUpperCase()}**:\n${text}`;
+        const displayRole = roleDisplay(role);
+        return `**${displayRole}**:\n${text}`;
       })
       .join("\n\n\n");
   };
@@ -109,7 +141,7 @@ export default function JsonConvoSplitter() {
     return new Blob([zipBytes], { type: 'application/zip' });
   };
 
-  // ---------- events ----------
+  // ---------- Events ----------
   const onFile = async (file) => {
     if (!file) return;
     try {
@@ -119,7 +151,7 @@ export default function JsonConvoSplitter() {
       setSelected(new Set(json.map((_, i) => i)));
       setPreviewIdx(json.length ? 0 : null);
     } catch (e) {
-      alert("无法解析 JSON：" + e.message);
+      alert((lang === 'zh' ? '无法解析 JSON：' : 'Cannot parse JSON: ') + e.message);
     }
   };
 
@@ -151,10 +183,17 @@ export default function JsonConvoSplitter() {
   const deselectAllVisible = () => { const n = new Set(selected); visible.forEach(({ idx }) => n.delete(idx)); setSelected(n); };
   const invertVisible = () => { const n = new Set(selected); visible.forEach(({ idx }) => (n.has(idx) ? n.delete(idx) : n.add(idx))); setSelected(n); };
 
+  const makeFileName = (conv) => {
+    const { iso } = fmtDate(conv.create_time);
+    const title = safe(conv.title);
+    const prefix = filePrefix ? `${safe(filePrefix)}_` : "";
+    const suffix = fileSuffix ? `_${safe(fileSuffix)}` : "";
+    return `${prefix}${iso}_${title}${suffix}.md`;
+  };
+
   const downloadOne = (idx) => {
     const conv = convos[idx];
-    const { iso } = fmtDate(conv.create_time);
-    const filename = `${iso}_${safe(conv.title)}.md`;
+    const filename = makeFileName(conv);
     const blob = new Blob([toMarkdown(conv)], { type: "text/markdown" });
     triggerDownload(blob, filename);
   };
@@ -164,8 +203,7 @@ export default function JsonConvoSplitter() {
     const enc = new TextEncoder();
     const files = [...selected].sort((a,b)=>a-b).map(i => {
       const conv = convos[i];
-      const { iso } = fmtDate(conv.create_time);
-      const name = `${iso}_${safe(conv.title)}.md`;
+      const name = makeFileName(conv);
       const data = enc.encode(toMarkdown(conv));
       return { name, data };
     });
@@ -181,8 +219,8 @@ export default function JsonConvoSplitter() {
       <style>{theme === 'cream' ? cssCream : theme === 'berry' ? cssBerry : cssBasket}</style>
       <div className="wrap">
         <header className="hero">
-          <h1>Conversation Splitter <span className="ham">🐹</span></h1>
-          <p>拖入 <code>conversations.json</code>，筛选、预览并批量导出 Markdown。</p>
+          <h1>{t('title')}</h1>
+          <p>{t('subtitle')}</p>
         </header>
 
         <section
@@ -192,109 +230,191 @@ export default function JsonConvoSplitter() {
           onDrop={onDrop}
         >
           <input type="file" accept="application/json" onChange={(e) => onFile(e.target.files?.[0])} />
-          <div className="hint"><strong>点击或拖拽</strong> <code>conversations.json</code> 到此处上传</div>
+          <div className="hint"><strong>{t('clickOrDrag')}</strong> <code>conversations.json</code> {t('toHere')}</div>
         </section>
 
+        <div className="toolbar">
+          <div className="stats">{t('total')} <b>{convos.length}</b> · {t('shown')} <b>{visible.length}</b> · {t('selected')} <b>{selected.size}</b></div>
+          <div className="actions">
+            <select className="select" value={lang} onChange={(e)=>setLang(e.target.value)}>
+              <option value="zh">简体中文</option>
+              <option value="en">English</option>
+            </select>
+            <select className="select" value={theme} onChange={(e)=>setTheme(e.target.value)}>
+              <option value="cream">{t('themeCream')}</option>
+              <option value="berry">{t('themeBerry')}</option>
+              <option value="basket">{t('themeBasket')}</option>
+            </select>
+            <input className="search" placeholder={t('filterByTitle')} value={query} onChange={(e)=>setQuery(e.target.value)} />
+            <button onClick={selectAllVisible}>{t('selectAll')}</button>
+            <button onClick={deselectAllVisible}>{t('deselectAll')}</button>
+            <button onClick={invertVisible}>{t('invert')}</button>
+          </div>
+        </div>
+
+        {/* Role mapping + filename controls */}
+        <div className="panel">
+          <div className="group">
+            <label>{t('roleUser')}</label>
+            <input className="input" value={roleNameUser} onChange={(e)=>setRoleNameUser(e.target.value)} />
+          </div>
+          <div className="group">
+            <label>{t('roleAssistant')}</label>
+            <input className="input" value={roleNameAssistant} onChange={(e)=>setRoleNameAssistant(e.target.value)} />
+          </div>
+          <div className="group">
+            <label>{t('roleSystem')}</label>
+            <input className="input" value={roleNameSystem} onChange={(e)=>setRoleNameSystem(e.target.value)} />
+          </div>
+          <div className="group">
+            <label>{t('filePrefix')}</label>
+            <input className="input" value={filePrefix} onChange={(e)=>setFilePrefix(e.target.value)} placeholder={t('optional')} />
+          </div>
+          <div className="group">
+            <label>{t('fileSuffix')}</label>
+            <input className="input" value={fileSuffix} onChange={(e)=>setFileSuffix(e.target.value)} placeholder={t('optional')} />
+          </div>
+          <div className="group rowBtns">
+            <button className="primary" disabled={!selected.size} onClick={downloadSelected}>{t('downloadSel')}</button>
+            <button className="primary" disabled={!selected.size} onClick={downloadZip}>{t('downloadZip')}</button>
+          </div>
+        </div>
+
         {convos.length > 0 && (
-          <>
-            <div className="toolbar">
-              <div className="stats">共 <b>{convos.length}</b> 条 · 显示 <b>{visible.length}</b> 条 · 已选 <b>{selected.size}</b> 条</div>
-              <div className="actions">
-                <select className="select" value={theme} onChange={(e)=>setTheme(e.target.value)}>
-                  <option value="cream">奶油糊糊</option>
-                  <option value="berry">浆果啃啃</option>
-                  <option value="basket">花篮翻翻</option>
-                </select>
-                <input className="search" placeholder="按标题筛选…" value={query} onChange={(e)=>setQuery(e.target.value)} />
-                <button onClick={selectAllVisible}>全选(当前筛选)</button>
-                <button onClick={deselectAllVisible}>取消全选</button>
-                <button onClick={invertVisible}>反选</button>
-                <button className="primary" disabled={!selected.size} onClick={downloadSelected}>吱吱收下</button>
-                <button className="primary" disabled={!selected.size} onClick={downloadZip}>打包ZIP</button>
-              </div>
+          <div className="split">
+            {/* left list */}
+            <div className="list">
+              {visible.map(({ c, idx }) => {
+                const checked = selected.has(idx);
+                const { d } = fmtDate(c.create_time);
+                const date = d.toISOString().slice(0, 10);
+                const msgCount = buildChain(c).length;
+                const active = previewIdx === idx;
+                return (
+                  <div key={c.id || idx} className={"row" + (active ? " active" : "")} onClick={() => highlight(idx)}>
+                    <label className="chk">
+                      <input type="checkbox" checked={checked} onChange={(e) => { e.stopPropagation(); toggle(idx); }} />
+                    </label>
+                    <div className="meta">
+                      <div className="title" title={c.title || "Untitled"}>{date}｜{c.title || "Untitled"}</div>
+                      <div className="sub">{msgCount} {t('messages')}</div>
+                    </div>
+                    <div className="spacer" />
+                    <button className="ghost" onClick={(e) => { e.stopPropagation(); downloadOne(idx); }}>{t('downloadOne')}</button>
+                  </div>
+                );
+              })}
             </div>
 
-            <div className="split">
-              {/* left list */}
-              <div className="list">
-                {visible.map(({ c, idx }) => {
-                  const checked = selected.has(idx);
-                  const { d } = fmtDate(c.create_time);
-                  const date = d.toISOString().slice(0, 10);
-                  const msgCount = buildChain(c).length;
-                  const active = previewIdx === idx;
-                  return (
-                    <div
-                      key={c.id || idx}
-                      className={"row" + (active ? " active" : "")}
-                      onClick={() => highlight(idx)}
-                    >
-                      <label className="chk">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => { e.stopPropagation(); toggle(idx); }}
-                        />
-                      </label>
-                      <div className="meta">
-                        <div className="title" title={c.title || "Untitled"}>{date}｜{c.title || "Untitled"}</div>
-                        <div className="sub">{msgCount} 条消息</div>
-                      </div>
-                      <div className="spacer" />
-                      <button className="ghost" onClick={(e) => { e.stopPropagation(); downloadOne(idx); }}>单独下载</button>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* right preview */}
-              <div className="preview">
-                {previewConv ? (
-                  <>
-                    <div className="pv-head">
-                      <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
-                      <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} 条消息</div>
-                    </div>
-                    <div className="pv-body">
-                      {previewMsgs.map((m, i) => {
-                        const role = m.author?.role || "assistant";
-                        const text = extractText(m);
-                        const side = role === "assistant" ? "left" : "right";
-                        const displayRole = role === "assistant" ? "Syzygy" : "串串";
-                        return (
-                          <div key={i} className={`msg ${side}`}>
-                            <div className="bubble">
-                              <div className="role">{displayRole}</div>
-                              <div className="text">{text}</div>
-                            </div>
+            {/* right preview */}
+            <div className="preview">
+              {previewConv ? (
+                <>
+                  <div className="pv-head">
+                    <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
+                    <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
+                  </div>
+                  <div className="pv-body">
+                    {previewMsgs.map((m, i) => {
+                      const role = m.author?.role || "assistant";
+                      const text = extractText(m);
+                      const side = role === "assistant" ? "left" : "right";
+                      const displayRole = roleDisplay(role);
+                      return (
+                        <div key={i} className={`msg ${side}`}>
+                          <div className="bubble">
+                            <div className="role">{displayRole}</div>
+                            <div className="text">{text}</div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="pv-empty">选择左侧一条对话进行预览</div>
-                )}
-              </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div className="pv-empty">{t('pickOnLeft')}</div>
+              )}
             </div>
-          </>
+          </div>
         )}
+
+        <footer className="foot">
+          <div>{t('privacyNote')}</div>
+        </footer>
       </div>
     </div>
   );
 }
 
+// ------------------- i18n -------------------
+const translations = {
+  zh: {
+    title: "Conversation Splitter – 公共版",
+    subtitle: "导入对话导出的 conversations.json，筛选预览并批量导出为 Markdown。",
+    clickOrDrag: "点击或拖拽",
+    toHere: "到此处上传",
+    total: "共",
+    shown: "显示",
+    selected: "已选",
+    themeCream: "奶油糊糊",
+    themeBerry: "浆果啃啃",
+    themeBasket: "花篮翻翻",
+    filterByTitle: "按标题筛选…",
+    selectAll: "全选(当前筛选)",
+    deselectAll: "取消全选",
+    invert: "反选",
+    roleUser: "用户名 (user)",
+    roleAssistant: "助手名 (assistant)",
+    roleSystem: "系统名 (system)",
+    filePrefix: "文件名前缀",
+    fileSuffix: "文件名后缀",
+    optional: "可留空",
+    downloadSel: "下载所选",
+    downloadZip: "打包 ZIP",
+    downloadOne: "单独下载",
+    messages: "条消息",
+    pickOnLeft: "选择左侧一条对话进行预览",
+    privacyNote: "所有处理均在本地浏览器完成，不会上传到服务器。",
+  },
+  en: {
+    title: "Conversation Splitter – Public Edition",
+    subtitle: "Import conversations.json, filter/preview and export conversations to Markdown.",
+    clickOrDrag: "Click or drag",
+    toHere: "here to upload",
+    total: "Total",
+    shown: "Shown",
+    selected: "Selected",
+    themeCream: "Cream",
+    themeBerry: "Berry",
+    themeBasket: "Basket",
+    filterByTitle: "Filter by title…",
+    selectAll: "Select All (filtered)",
+    deselectAll: "Deselect All",
+    invert: "Invert",
+    roleUser: "User name (user)",
+    roleAssistant: "Assistant name (assistant)",
+    roleSystem: "System name (system)",
+    filePrefix: "Filename prefix",
+    fileSuffix: "Filename suffix",
+    optional: "optional",
+    downloadSel: "Download Selected",
+    downloadZip: "ZIP Selected",
+    downloadOne: "Download",
+    messages: "messages",
+    pickOnLeft: "Pick a conversation on the left to preview",
+    privacyNote: "All processing happens locally in your browser; nothing is uploaded.",
+  },
+};
+
 // ------------------- Themes -------------------
-// 奶油糊糊（浅色）
-const cssCream = `
+const cssBase = `
 :root{--bg:#F5E6D1;--card:#fff;--muted:#5E7B9B;--text:#2b2b2b;--accent:#B46C72;--accent-600:#6E2E34;--ring:#FFC8CB;--bubble-user:#fff;--bubble-assist:#FFECEF}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
 .outer{min-height:100vh;display:flex;align-items:center;justify-content:center}
 .wrap{max-width:1100px;margin:32px auto;padding:0 16px;color:var(--text)}
 .hero{background:linear-gradient(135deg,rgba(255,200,203,.45),rgba(180,108,114,.15));border:1px solid rgba(180,108,114,.25);padding:18px 20px;border-radius:16px;box-shadow:0 8px 24px rgba(110,46,52,.12)}
-.hero h1{margin:0 0 6px 0;font-size:22px;letter-spacing:.4px;display:flex;align-items:center;gap:8px}
-.hero .ham{font-size:20px}
+.hero h1{margin:0 0 6px 0;font-size:22px;letter-spacing:.4px}
 .hero p{margin:0;color:var(--muted)}
 .dropzone{margin-top:14px;border:2px dashed rgba(180,108,114,.45);border-radius:14px;padding:18px;text-align:center;background:rgba(255,255,255,.6)}
 .dropzone.dragging{background:rgba(255,200,203,.4);border-color:var(--ring)}
@@ -311,6 +431,10 @@ button:hover{border-color:var(--accent)}
 button.primary{background:var(--accent);border-color:transparent;color:#fff}
 button.primary:disabled{opacity:.55;cursor:not-allowed}
 button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(--muted)}
+.panel{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:12px}
+.panel .group{display:flex;flex-direction:column;gap:6px}
+.panel .group.rowBtns{grid-column:span 5;display:flex;flex-direction:row;gap:8px;align-items:center}
+.input{height:34px;padding:6px 10px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff}
 .split{display:grid;grid-template-columns: 1fr 1fr;gap:12px;margin-top:12px}
 .list{border:1px solid rgba(110,46,52,.25);border-radius:12px;overflow:hidden;background:var(--card);max-height:540px;overflow-y:auto}
 .row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(110,46,52,.15);background:#fff}
@@ -335,111 +459,29 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .msg .role{font-size:11px;color:#6E2E34;opacity:.8;margin-bottom:4px}
 .msg .text{white-space:pre-wrap;word-break:break-word}
 .pv-empty{padding:20px;color:var(--muted)}
+.foot{margin:16px 0;color:var(--muted);font-size:12px;text-align:center}
+@media (max-width: 1000px){.panel{grid-template-columns:repeat(2,1fr)}.panel .group.rowBtns{grid-column:span 2}}
 @media (max-width: 900px){.split{grid-template-columns:1fr}}
 `;
 
-// 浆果啃啃（复古深莓）
-const cssBerry = `
-:root{--bg:#284139;--card:#111A19;--muted:#BB6830;--text:#F8D794;--accent:#BB6830;--accent-600:#F8D794;--ring:#BB6830;--bubble-user:#111A19;--bubble-assist:#2f5146}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-.outer{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.wrap{max-width:1100px;margin:32px auto;padding:0 16px;color:var(--text)}
-.hero{background:linear-gradient(135deg,rgba(187,104,48,.25),rgba(17,26,25,.6));border:1px solid rgba(187,104,48,.4);padding:18px 20px;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
-.hero h1{margin:0 0 6px 0;font-size:22px;letter-spacing:.4px;display:flex;align-items:center;gap:8px;color:var(--text)}
-.hero .ham{font-size:20px}
-.hero p{margin:0;color:var(--muted)}
-.dropzone{margin-top:14px;border:2px dashed rgba(187,104,48,.6);border-radius:14px;padding:18px;text-align:center;background:rgba(17,26,25,.7)}
-.dropzone.dragging{background:rgba(187,104,48,.25);border-color:var(--ring)}
-.dropzone input{display:block;margin:0 auto 8px}
-.dropzone .hint{color:var(--muted)}
-.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
-.toolbar .stats{color:var(--muted)}
-.toolbar .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
-.select{height:34px;padding:0 8px;border-radius:10px;border:1px solid rgba(187,104,48,.4);background:#111A19;color:var(--text)}
-.search{height:34px;padding:6px 10px;border-radius:10px;border:1px solid rgba(187,104,48,.4);background:#111A19;color:var(--text);min-width:180px;outline:none}
-.search:focus{border-color:var(--ring);box-shadow:0 0 0 3px rgba(187,104,48,.25)}
-button{height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(187,104,48,.4);background:#111A19;color:var(--text);cursor:pointer}
-button:hover{border-color:var(--ring)}
-button.primary{background:var(--accent);border-color:transparent;color:#111A19}
-button.primary:disabled{opacity:.55;cursor:not-allowed}
-button.ghost{background:transparent;border-color:rgba(187,104,48,.4);color:var(--muted)}
-.split{display:grid;grid-template-columns: 1fr 1fr;gap:12px;margin-top:12px}
-.list{border:1px solid rgba(187,104,48,.4);border-radius:12px;overflow:hidden;background:var(--card);max-height:540px;overflow-y:auto}
-.row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(187,104,48,.3);background:#111A19;color:var(--text)}
-.row:hover{background:#1a2a26}
-.row.active{background:#223630}
-.row:last-child{border-bottom:none}
-.chk{display:flex;align-items:center}
-.meta{min-width:0}
-.title{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
-.sub{font-size:12px;color:var(--muted)}
-.spacer{flex:1}
-.preview{border:1px solid rgba(187,104,48,.4);border-radius:12px;background:var(--card);display:flex;flex-direction:column;min-height:360px;max-height:540px;overflow:hidden;color:var(--text)}
-.pv-head{padding:12px 14px;border-bottom:1px solid rgba(187,104,48,.3)}
-.pv-title{font-weight:600}
-.pv-sub{font-size:12px;color:var(--muted)}
-.pv-body{padding:12px 10px;overflow:auto;background:#111A19}
-.msg{display:flex;margin:8px 0}
-.msg.left{justify-content:flex-start}
-.msg.right{justify-content:flex-end}
-.msg .bubble{max-width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(187,104,48,.4);background:var(--bubble-assist);box-shadow:0 2px 8px rgba(0,0,0,.25);color:var(--text)}
-.msg.right .bubble{background:var(--bubble-user)}
-.msg .role{font-size:11px;color:var(--accent);opacity:.9;margin-bottom:4px}
-.msg .text{white-space:pre-wrap;word-break:break-word}
-.pv-empty{padding:20px;color:var(--muted)}
-@media (max-width: 900px){.split{grid-template-columns:1fr}}
-`;
+// Cream
+const cssCream = cssBase;
 
-// 花篮翻翻（莫奈花园风紫色系）
-const cssBasket = `
-:root{--bg:#F3EAF7;--card:#FFFFFF;--muted:#9C7CA5;--text:#2E2435;--accent:#C89BCB;--accent-600:#7A4E7E;--ring:#C89BCB;--bubble-user:#fff;--bubble-assist:#F8F0FA}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
-.outer{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.wrap{max-width:1100px;margin:32px auto;padding:0 16px;color:var(--text)}
-.hero{background:linear-gradient(135deg,rgba(200,155,203,.3),rgba(122,78,126,.15));border:1px solid rgba(200,155,203,.35);padding:18px 20px;border-radius:16px;box-shadow:0 8px 24px rgba(46,36,53,.15)}
-.hero h1{margin:0 0 6px 0;font-size:22px;display:flex;align-items:center;gap:8px;color:var(--text)}
-.hero .ham{font-size:20px}
-.hero p{margin:0;color:var(--muted)}
-.dropzone{margin-top:14px;border:2px dashed rgba(200,155,203,.45);border-radius:14px;padding:18px;text-align:center;background:rgba(255,255,255,.8)}
-.dropzone.dragging{background:rgba(200,155,203,.25);border-color:var(--ring)}
-.dropzone input{display:block;margin:0 auto 8px}
-.dropzone .hint{color:var(--muted)}
-.toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:16px}
-.toolbar .stats{color:var(--muted)}
-.toolbar .actions{margin-left:auto;display:flex;gap:8px;align-items:center}
-.select{height:34px;padding:0 8px;border-radius:10px;border:1px solid rgba(200,155,203,.35);background:#fff;color:var(--text)}
-.search{height:34px;padding:6px 10px;border-radius:10px;border:1px solid rgba(200,155,203,.35);background:#fff;color:var(--text);min-width:180px;outline:none}
-.search:focus{border-color:var(--ring);box-shadow:0 0 0 3px rgba(200,155,203,.25)}
-button{height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(200,155,203,.35);background:#fff;color:var(--text);cursor:pointer}
-button:hover{border-color:var(--ring)}
-button.primary{background:var(--accent);border-color:transparent;color:#fff}
-button.primary:disabled{opacity:.55;cursor:not-allowed}
-button.ghost{background:transparent;border-color:rgba(200,155,203,.35);color:var(--muted)}
-.split{display:grid;grid-template-columns: 1fr 1fr;gap:12px;margin-top:12px}
-.list{border:1px solid rgba(200,155,203,.35);border-radius:12px;overflow:hidden;background:var(--card);max-height:540px;overflow-y:auto}
-.row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(200,155,203,.25);background:#fff}
-.row:hover{background:#faf5fb}
-.row.active{background:#f3e1f6}
-.row:last-child{border-bottom:none}
-.chk{display:flex;align-items:center}
-.meta{min-width:0}
-.title{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text)}
-.sub{font-size:12px;color:var(--muted)}
-.spacer{flex:1}
-.preview{border:1px solid rgba(200,155,203,.35);border-radius:12px;background:var(--card);display:flex;flex-direction:column;min-height:360px;max-height:540px;overflow:hidden;color:var(--text)}
-.pv-head{padding:12px 14px;border-bottom:1px solid rgba(200,155,203,.25)}
-.pv-title{font-weight:600}
-.pv-sub{font-size:12px;color:var(--muted)}
-.pv-body{padding:12px 10px;overflow:auto;background:#fff}
-.msg{display:flex;margin:8px 0}
-.msg.left{justify-content:flex-start}
-.msg.right{justify-content:flex-end}
-.msg .bubble{max-width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(200,155,203,.3);background:var(--bubble-assist);box-shadow:0 2px 8px rgba(0,0,0,.05);color:var(--text)}
-.msg.right .bubble{background:var(--bubble-user)}
-.msg .role{font-size:11px;color:var(--accent);opacity:.9;margin-bottom:4px}
-.msg .text{white-space:pre-wrap;word-break:break-word}
-.pv-empty{padding:20px;color:var(--muted)}
-@media (max-width: 900px){.split{grid-template-columns:1fr}}
-`;
+// Berry
+const cssBerry = cssBase
+  .replaceAll('#F5E6D1', '#284139')
+  .replaceAll('#fff', '#111A19')
+  .replaceAll('#2b2b2b', '#F8D794')
+  .replaceAll('#5E7B9B', '#BB6830')
+  .replaceAll('#B46C72', '#BB6830')
+  .replaceAll('#6E2E34', '#F8D794')
+  .replaceAll('#FFECEF', '#2f5146');
+
+// Basket
+const cssBasket = cssBase
+  .replaceAll('#F5E6D1', '#F3EAF7')
+  .replaceAll('#5E7B9B', '#9C7CA5')
+  .replaceAll('#2b2b2b', '#2E2435')
+  .replaceAll('#B46C72', '#C89BCB')
+  .replaceAll('#6E2E34', '#7A4E7E')
+  .replaceAll('#FFECEF', '#F8F0FA');
