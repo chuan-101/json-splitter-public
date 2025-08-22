@@ -4,5 +4,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/json-splitter/',  
+  base: '/json-splitter-public/',  
+   build: { outDir: 'docs' } 
 })

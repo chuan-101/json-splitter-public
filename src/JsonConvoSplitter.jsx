@@ -1,27 +1,21 @@
 import React, { useMemo, useState } from "react";
 
 /**
- * PublicJsonConvoExporter
- * — A clean, public-friendly version of the JSON conversation splitter/exporter.
- * Differences vs. the private build:
- *   • Neutral speaker names (Assistant/User) with user-editable labels
- *   • Optional nickname mapping by role
- *   • Language toggle (简体中文 / English)
- *   • Same minimal ZIP (store) writer, no dependencies
- *   • Theme selector kept, hamster removed (but still cute ✨)
- *   • Filename pattern customizable
+ * Conversation Splitter – Public Edition
+ * 公开版：中性可配置的角色名、中文/英文、主题切换、ZIP 打包、本地处理
  */
-export default function PublicJsonConvoExporter() {
+
+export default function JsonConvoSplitter() {
   // ---------- UI State ----------
   const [convos, setConvos] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [query, setQuery] = useState("");
   const [dragging, setDragging] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(null);
-  const [theme, setTheme] = useState("cream");
-  const [lang, setLang] = useState("zh"); // zh | en
+  const [theme, setTheme] = useState("cream"); // cream | berry | basket | cloudy
+  const [lang, setLang] = useState("zh");      // zh | en
 
-  // Display name mapping
+  // Display name mapping（可自定义显示名）
   const [roleNameUser, setRoleNameUser] = useState("User");
   const [roleNameAssistant, setRoleNameAssistant] = useState("Assistant");
   const [roleNameSystem, setRoleNameSystem] = useState("System");
@@ -33,7 +27,10 @@ export default function PublicJsonConvoExporter() {
   const t = (k) => (translations[lang]?.[k] ?? k);
 
   // ---------- Helpers ----------
-  const safe = (s) => (s || "Untitled").replace(/[^0-9A-Za-z_\-\u4e00-\u9fa5]+/g, "_").slice(0, 80);
+  const safe = (s) =>
+    (s || "Untitled")
+      .replace(/[^0-9A-Za-z_\-\u4e00-\u9fa5]+/g, "_")
+      .slice(0, 80);
 
   const buildChain = (conv) => {
     const chain = [];
@@ -58,7 +55,7 @@ export default function PublicJsonConvoExporter() {
     const r = (role || "assistant").toLowerCase();
     if (r === "user") return roleNameUser;
     if (r === "system") return roleNameSystem;
-    return roleNameAssistant; // assistant, tool, function → treat as assistant for display
+    return roleNameAssistant; // assistant/tool/function 都归为助手侧显示
   };
 
   const toMarkdown = (conv) => {
@@ -214,9 +211,16 @@ export default function PublicJsonConvoExporter() {
   const previewConv = previewIdx != null ? convos[previewIdx] : null;
   const previewMsgs = previewConv ? buildChain(previewConv) : [];
 
+  // ---------- Theme CSS ----------
+  const css = theme === 'cream' ? cssCream
+    : theme === 'berry' ? cssBerry
+    : theme === 'basket' ? cssBasket
+    : theme === 'cloudy' ? cssCloudy
+    : cssCream;
+
   return (
-    <div className={`outer ${theme === 'cream' ? 'theme-cream' : theme === 'berry' ? 'theme-berry' : 'theme-basket'}`}>
-      <style>{theme === 'cream' ? cssCream : theme === 'berry' ? cssBerry : cssBasket}</style>
+    <div className="outer">
+      <style>{css}</style>
       <div className="wrap">
         <header className="hero">
           <h1>{t('title')}</h1>
@@ -244,6 +248,7 @@ export default function PublicJsonConvoExporter() {
               <option value="cream">{t('themeCream')}</option>
               <option value="berry">{t('themeBerry')}</option>
               <option value="basket">{t('themeBasket')}</option>
+              <option value="cloudy">{t('themeCloudy')}</option>
             </select>
             <input className="search" placeholder={t('filterByTitle')} value={query} onChange={(e)=>setQuery(e.target.value)} />
             <button onClick={selectAllVisible}>{t('selectAll')}</button>
@@ -291,9 +296,17 @@ export default function PublicJsonConvoExporter() {
                 const msgCount = buildChain(c).length;
                 const active = previewIdx === idx;
                 return (
-                  <div key={c.id || idx} className={"row" + (active ? " active" : "")} onClick={() => highlight(idx)}>
+                  <div
+                    key={c.id || idx}
+                    className={"row" + (active ? " active" : "")}
+                    onClick={() => highlight(idx)}
+                  >
                     <label className="chk">
-                      <input type="checkbox" checked={checked} onChange={(e) => { e.stopPropagation(); toggle(idx); }} />
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => { e.stopPropagation(); toggle(idx); }}
+                      />
                     </label>
                     <div className="meta">
                       <div className="title" title={c.title || "Untitled"}>{date}｜{c.title || "Untitled"}</div>
@@ -346,7 +359,7 @@ export default function PublicJsonConvoExporter() {
   );
 }
 
-// ------------------- i18n -------------------
+/* ------------------- i18n ------------------- */
 const translations = {
   zh: {
     title: "Conversation Splitter – 公共版",
@@ -359,6 +372,7 @@ const translations = {
     themeCream: "奶油糊糊",
     themeBerry: "浆果啃啃",
     themeBasket: "花篮翻翻",
+    themeCloudy: "云朵团团",
     filterByTitle: "按标题筛选…",
     selectAll: "全选(当前筛选)",
     deselectAll: "取消全选",
@@ -387,6 +401,7 @@ const translations = {
     themeCream: "Cream",
     themeBerry: "Berry",
     themeBasket: "Basket",
+    themeCloudy: "Cloudy Puff",
     filterByTitle: "Filter by title…",
     selectAll: "Select All (filtered)",
     deselectAll: "Deselect All",
@@ -406,7 +421,7 @@ const translations = {
   },
 };
 
-// ------------------- Themes -------------------
+/* ------------------- Themes ------------------- */
 const cssBase = `
 :root{--bg:#F5E6D1;--card:#fff;--muted:#5E7B9B;--text:#2b2b2b;--accent:#B46C72;--accent-600:#6E2E34;--ring:#FFC8CB;--bubble-user:#fff;--bubble-assist:#FFECEF}
 *{box-sizing:border-box}
@@ -485,3 +500,12 @@ const cssBasket = cssBase
   .replaceAll('#B46C72', '#C89BCB')
   .replaceAll('#6E2E34', '#7A4E7E')
   .replaceAll('#FFECEF', '#F8F0FA');
+
+// 云朵团团 (Cloudy Puff)
+const cssCloudy = cssBase
+  .replaceAll('#F5E6D1', '#C6D4EE') // 背景
+  .replaceAll('#5E7B9B', '#5A97CA') // muted
+  .replaceAll('#2b2b2b', '#264C9D') // 正文字色
+  .replaceAll('#B46C72', '#0E246A') // accent
+  .replaceAll('#6E2E34', '#264C9D') // accent-600
+  .replaceAll('#FFECEF', '#C6D4EE'); // 气泡辅助色
