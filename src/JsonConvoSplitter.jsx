@@ -477,6 +477,34 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .foot{margin:16px 0;color:var(--muted);font-size:12px;text-align:center}
 @media (max-width: 1000px){.panel{grid-template-columns:repeat(2,1fr)}.panel .group.rowBtns{grid-column:span 2}}
 @media (max-width: 900px){.split{grid-template-columns:1fr}}
+
+/* ======== Mobile polish ======== */
+.toolbar .actions{ flex-wrap: wrap; }
+.toolbar .actions > *{ flex: 0 1 auto; }
+
+@media (max-width: 1024px){
+  .split{ grid-template-columns:1fr; }
+}
+
+@media (max-width: 720px){
+  .wrap{ padding: 0 12px; }
+  .toolbar{ gap: 8px; }
+  .toolbar .actions{ width: 100%; margin-left: 0; gap: 8px; }
+  .toolbar .actions .search{ min-width: 0; flex: 1 1 180px; }
+  .toolbar .actions select,
+  .toolbar .actions button{ flex: 1 1 48%; }
+  .panel{ grid-template-columns: 1fr; }
+  .panel .group.rowBtns{ grid-column: auto; }
+}
+
+@media (max-width: 420px){
+  .hero h1{ font-size: 18px; }
+  .title{ font-size: 13px; }
+  .sub{ font-size: 11px; }
+  .select, .search, .input, button{ height: 32px; }
+  .pv-head{ padding: 10px 12px; }
+  .pv-body{ padding: 10px 8px; }
+}
 `;
 
 // Cream
