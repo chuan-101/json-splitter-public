@@ -1,4 +1,12 @@
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Header from "./components/Header";
+import Dropzone from "./components/Dropzone";
+import Toolbar from "./components/Toolbar";
+import StatsPanel from "./components/StatsPanel";
+import SettingsPanel from "./components/SettingsPanel";
+import ConversationList from "./components/ConversationList";
+import PreviewPanel from "./components/PreviewPanel";
+import GlobalSearchResults from "./components/GlobalSearchResults";
 import "./styles/base.css";
 import "./styles/themes/cream.css";
 import "./styles/themes/berry.css";
@@ -42,19 +50,6 @@ export default function JsonConvoSplitter() {
   const untitledText = t('untitled');
 
   // ---------- Helpers ----------
-  const safe = (s) =>
-    (s || "Untitled")
-      .replace(/[^0-9A-Za-z_\-\u4e00-\u9fa5]+/g, "_")
-      .slice(0, 80);
-
-  const safeStringify = useCallback((val) => {
-    try {
-      return typeof val === "string" ? val : JSON.stringify(val);
-    } catch {
-      return String(val ?? "");
-    }
-  }, []);
-
   const extractMessageText = useCallback((message) => {
     const content = message?.content;
     const out = [];
@@ -163,74 +158,6 @@ export default function JsonConvoSplitter() {
       .join("\n\n\n");
   };
 
-  const triggerDownload = (blob, name) => {
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement("a"), { href: url, download: name });
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const fmtDate = (sec) => {
-    const d = new Date((sec || Date.now() / 1000) * 1000);
-    const iso = d.toISOString().slice(0, 16).replace(/[:T]/g, "-");
-    return { d, iso };
-  };
-
-  // ---------- Minimal ZIP (store) ----------
-  const crc32Table = useMemo(() => {
-    const t = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      t[i] = c >>> 0;
-    }
-    return t;
-  }, []);
-  const crc32 = (u8) => {
-    let c = 0xFFFFFFFF;
-    for (let i = 0; i < u8.length; i++) c = crc32Table[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
-    return (c ^ 0xFFFFFFFF) >>> 0;
-  };
-  const le16 = (n) => new Uint8Array([n & 255, (n >>> 8) & 255]);
-  const le32 = (n) => new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
-  const concatBytes = (parts) => {
-    const size = parts.reduce((s, p) => s + p.length, 0);
-    const out = new Uint8Array(size);
-    let pos = 0;
-    for (const p of parts) { out.set(p, pos); pos += p.length; }
-    return out;
-  };
-  const makeZip = async (files) => {
-    const chunks = [];
-    const central = [];
-    let offset = 0;
-    const enc = new TextEncoder();
-    for (const f of files) {
-      const nameBytes = enc.encode(f.name);
-      const data = f.data;
-      const crc = crc32(data);
-      const hdr = [
-        le32(0x04034b50), le16(20), le16(0), le16(0), le16(0), le16(0),
-        le32(crc), le32(data.length), le32(data.length), le16(nameBytes.length), le16(0)
-      ];
-      const local = concatBytes([...hdr, nameBytes, data]);
-      chunks.push(local);
-      const cenHdr = [
-        le32(0x02014b50), le16(20), le16(20), le16(0), le16(0), le16(0), le16(0),
-        le32(crc), le32(data.length), le32(data.length), le16(nameBytes.length), le16(0), le16(0), le16(0), le16(0),
-        le32(offset)
-      ];
-      central.push(concatBytes([...cenHdr, nameBytes]));
-      offset += local.length;
-    }
-    const centralDir = concatBytes(central);
-    const end = concatBytes([le32(0x06054b50), le16(0), le16(0), le16(files.length), le16(files.length), le32(centralDir.length), le32(offset), le16(0)]);
-    const zipBytes = concatBytes([...chunks, centralDir, end]);
-    return new Blob([zipBytes], { type: 'application/zip' });
-  };
-
   // ---------- Events ----------
   const onFile = async (file) => {
     if (!file) return;
@@ -247,13 +174,6 @@ export default function JsonConvoSplitter() {
     } catch (e) {
       alert((lang === 'zh' ? '无法解析 JSON：' : 'Cannot parse JSON: ') + e.message);
     }
-  };
-
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) onFile(file);
   };
 
   const toggle = (idx) => {
@@ -505,244 +425,84 @@ export default function JsonConvoSplitter() {
   return (
     <div className="outer" data-theme={theme}>
       <div className="wrap">
-        <header className="hero">
-          <h1>{t('title')}</h1>
-          <p>{t('subtitle')}</p>
-        </header>
+        <Header t={t} />
 
-        <section
-          className={"dropzone" + (dragging ? " dragging" : "")}
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={onDrop}
-        >
-          <input type="file" accept="application/json" onChange={(e) => onFile(e.target.files?.[0])} />
-          <div className="hint"><strong>{t('clickOrDrag')}</strong> <code>conversations.json</code> {t('toHere')}</div>
-        </section>
+        <Dropzone onFile={onFile} dragging={dragging} setDragging={setDragging} t={t} />
 
-        <div className="toolbar">
-          <div className="stats">{t('total')} <b>{convos.length}</b> · {t('shown')} <b>{visible.length}</b> · {t('selected')} <b>{selected.size}</b></div>
-          <div className="actions">
-            <select className="select" value={lang} onChange={(e)=>setLang(e.target.value)}>
-              <option value="zh">简体中文</option>
-              <option value="en">English</option>
-            </select>
-            <select className="select" value={theme} onChange={(e)=>setTheme(e.target.value)}>
-              <option value="cream">{t('themeCream')}</option>
-              <option value="berry">{t('themeBerry')}</option>
-              <option value="basket">{t('themeBasket')}</option>
-              <option value="cloudy">{t('themeCloudy')}</option>
-            </select>
-            <input className="search" placeholder={t('filterByTitle')} value={titleQuery} onChange={(e)=>setTitleQuery(e.target.value)} />
-            <div className="search-group">
-              <span className="search-label">{t('searchInMessages')}</span>
-              <input
-                className="search"
-                placeholder={t('searchInMessages')}
-                value={contentQuery}
-                onChange={(e)=>setContentQuery(e.target.value)}
-              />
-              <label className="toggle">
-                <input type="checkbox" checked={globalSearch} onChange={(e)=>setGlobalSearch(e.target.checked)} />
-                <span>{t('searchAllConvos')}</span>
-              </label>
-            </div>
-            <button onClick={selectAllVisible}>{t('selectAll')}</button>
-            <button onClick={deselectAllVisible}>{t('deselectAll')}</button>
-            <button onClick={invertVisible}>{t('invert')}</button>
-          </div>
-        </div>
+        <Toolbar
+          lang={lang}
+          setLang={setLang}
+          theme={theme}
+          setTheme={setTheme}
+          titleQuery={titleQuery}
+          setTitleQuery={setTitleQuery}
+          contentQuery={contentQuery}
+          setContentQuery={setContentQuery}
+          globalSearch={globalSearch}
+          setGlobalSearch={setGlobalSearch}
+          selectAllVisible={selectAllVisible}
+          deselectAllVisible={deselectAllVisible}
+          invertVisible={invertVisible}
+          convosCount={convos.length}
+          visibleCount={visible.length}
+          selectedCount={selected.size}
+          t={t}
+        />
 
-        {stats && (
-          <details className="stats-panel" open>
-            <summary className="stats-summary">{t('statsSummary')}</summary>
-            <div className="stats-grid">
-              <div className="stat-card">
-                <div className="stat-label">{t('statConvos')}</div>
-                <div className="stat-value">{stats.conversationCount}</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">{t('statMessages')}</div>
-                <div className="stat-value">{stats.messageCount}</div>
-                <div className="stat-sub">{t('statAvgChars')}: {stats.avgChars}</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">{t('statChars')}</div>
-                <div className="stat-sub">{t('statUserChars')}: {stats.userCharCount}</div>
-                <div className="stat-sub">{t('statAssistantChars')}: {stats.assistantCharCount}</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">{t('statLongestStreak')}</div>
-                <div className="stat-value">{stats.longestStreak} {t('days')}</div>
-                {stats.longestStreakRange && (
-                  <div className="stat-sub">{formatRange(stats.longestStreakRange)}</div>
-                )}
-                {stats.currentStreak != null && (
-                  <div className="stat-sub">
-                    {t('statCurrentStreak')}: {stats.currentStreak} {t('days')}
-                    {stats.currentStreakRange ? ` (${formatRange(stats.currentStreakRange)})` : ""}
-                  </div>
-                )}
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">{t('statActiveDays')}</div>
-                <div className="stat-value">{stats.activeDays}</div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">{t('statRoles')}</div>
-                <div className="bars">
-                  {Object.entries(stats.roleCounts).map(([role, count]) => (
-                    <div key={role} className="bar-row">
-                      <span className="bar-label">{role}</span>
-                      <div className="bar-track">
-                        <span
-                          className="bar-fill"
-                          style={{ width: `${Math.min(100, (count / stats.messageCount) * 100)}%` }}
-                          aria-hidden
-                        />
-                      </div>
-                      <span className="bar-count">{count}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="stat-card">
-                <div className="stat-label">{t('statTopModels')}</div>
-                <ul className="stat-list">
-                  {stats.topModels.map(([model, count]) => (
-                    <li key={model}>{model}: {count}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </details>
-        )}
+        {stats && <StatsPanel stats={stats} t={t} formatRange={formatRange} />}
 
-        {/* Role mapping + filename controls */}
-        <div className="panel">
-          <div className="group">
-            <label>{t('roleUser')}</label>
-            <input className="input" value={roleNameUser} onChange={(e)=>setRoleNameUser(e.target.value)} />
-          </div>
-          <div className="group">
-            <label>{t('roleAssistant')}</label>
-            <input className="input" value={roleNameAssistant} onChange={(e)=>setRoleNameAssistant(e.target.value)} />
-          </div>
-          <div className="group">
-            <label>{t('roleSystem')}</label>
-            <input className="input" value={roleNameSystem} onChange={(e)=>setRoleNameSystem(e.target.value)} />
-          </div>
-          <div className="group">
-            <label>{t('filePrefix')}</label>
-            <input className="input" value={filePrefix} onChange={(e)=>setFilePrefix(e.target.value)} placeholder={t('optional')} />
-          </div>
-          <div className="group">
-            <label>{t('fileSuffix')}</label>
-            <input className="input" value={fileSuffix} onChange={(e)=>setFileSuffix(e.target.value)} placeholder={t('optional')} />
-          </div>
-          <div className="group rowBtns">
-            <button className="primary" disabled={!selected.size} onClick={downloadSelected}>{t('downloadSel')}</button>
-            <button className="primary" disabled={!selected.size} onClick={downloadZip}>{t('downloadZip')}</button>
-          </div>
-        </div>
+        <SettingsPanel
+          roleNameUser={roleNameUser}
+          setRoleNameUser={setRoleNameUser}
+          roleNameAssistant={roleNameAssistant}
+          setRoleNameAssistant={setRoleNameAssistant}
+          roleNameSystem={roleNameSystem}
+          setRoleNameSystem={setRoleNameSystem}
+          filePrefix={filePrefix}
+          setFilePrefix={setFilePrefix}
+          fileSuffix={fileSuffix}
+          setFileSuffix={setFileSuffix}
+          downloadSelected={downloadSelected}
+          downloadZip={downloadZip}
+          selectedSize={selected.size}
+          t={t}
+        />
 
         {globalSearch && contentQuery.trim() && (
-          <div className="global-results">
-            <div className="gr-head">
-              <div className="gr-title">{t('searchAcrossAll')}</div>
-              <div className="gr-sub">{t('searchHint')}</div>
-            </div>
-            <div className="gr-list">
-              {globalMatches.length ? globalMatches.map((hit) => (
-                <button
-                  key={`${hit.convIdx}-${hit.msgIdx}`}
-                  className="gr-item"
-                  onClick={() => {
-                    setPreviewIdx(hit.convIdx);
-                    setTargetMessageIdx(hit.msgIdx);
-                  }}
-                >
-                  <div className="gr-line"><b>{hit.title}</b> · #{hit.msgIdx + 1}</div>
-                  <div className="gr-snippet">{hit.snippet}</div>
-                </button>
-              )) : <div className="gr-empty">{t('searchNoResult')}</div>}
-            </div>
-          </div>
+          <GlobalSearchResults
+            globalMatches={globalMatches}
+            setPreviewIdx={setPreviewIdx}
+            setTargetMessageIdx={setTargetMessageIdx}
+            t={t}
+          />
         )}
 
         {convos.length > 0 && (
           <div className="split">
-            {/* left list */}
-            <div className="list">
-              {visible.map(({ c, idx }) => {
-                const checked = selected.has(idx);
-                const { d } = fmtDate(c.create_time);
-                const date = d.toISOString().slice(0, 10);
-                const msgCount = buildChain(c).filter(isPreviewMessageVisible).length;
-                const active = previewIdx === idx;
-                return (
-                  <div
-                    key={c.id || idx}
-                    className={"row" + (active ? " active" : "")}
-                    onClick={() => highlight(idx)}
-                  >
-                    <label className="chk">
-                      <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={(e) => { e.stopPropagation(); toggle(idx); }}
-                      />
-                    </label>
-                    <div className="meta">
-                      <div className="title" title={c.title || "Untitled"}>{date}｜{c.title || "Untitled"}</div>
-                      <div className="sub">{msgCount} {t('messages')}</div>
-                    </div>
-                    <div className="spacer" />
-                    <button className="ghost" onClick={(e) => { e.stopPropagation(); downloadOne(idx); }}>{t('downloadOne')}</button>
-                  </div>
-                );
-              })}
-            </div>
+            <ConversationList
+              visible={visible}
+              selected={selected}
+              toggle={toggle}
+              highlight={highlight}
+              previewIdx={previewIdx}
+              downloadOne={downloadOne}
+              buildChain={buildChain}
+              fmtDate={fmtDate}
+              isPreviewMessageVisible={isPreviewMessageVisible}
+              t={t}
+            />
 
-            {/* right preview */}
-            <div className="preview">
-              {previewConv ? (
-                <>
-                  <div className="pv-head">
-                    <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
-                    <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {nonSystemPreviewMsgsWithModel.length} {t('messages')}</div>
-                  </div>
-                  <div className="pv-body" ref={previewScrollRef}>
-                    {filteredPreviewMsgsWithModel.map(({ msg, model, idx }) => {
-                      const role = msg.author?.role || "assistant";
-                      const text = normalizeMessage(msg);
-                      const side = role === "assistant" ? "left" : "right";
-                      const displayRole = roleDisplay(role);
-                      return (
-                        <div
-                          key={idx}
-                          className={`msg ${side}`}
-                          ref={(el) => {
-                            if (el) messageRefs.current.set(idx, el);
-                            else messageRefs.current.delete(idx);
-                          }}
-                        >
-                          <div className="bubble">
-                            <div className="meta-line">
-                              <div className="role">{displayRole}</div>
-                              <span className="model-badge">{model}</span>
-                            </div>
-                            <div className="text">{highlightMatches(text)}</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              ) : (
-                <div className="pv-empty">{t('pickOnLeft')}</div>
-              )}
-            </div>
+            <PreviewPanel
+              previewConv={previewConv}
+              filteredMessages={filteredPreviewMsgsWithModel}
+              highlightMatches={highlightMatches}
+              roleDisplay={roleDisplay}
+              fmtDate={fmtDate}
+              messageRefs={messageRefs}
+              previewScrollRef={previewScrollRef}
+              nonSystemMessageCount={nonSystemPreviewMsgsWithModel.length}
+              t={t}
+            />
           </div>
         )}
 
