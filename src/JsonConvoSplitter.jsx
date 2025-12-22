@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Conversation Splitter – Public Edition
@@ -9,16 +9,16 @@ export default function JsonConvoSplitter() {
   // ---------- UI State ----------
   const [convos, setConvos] = useState([]);
   const [selected, setSelected] = useState(new Set());
-  const [query, setQuery] = useState("");
+  const [titleQuery, setTitleQuery] = useState("");
+  const [contentQuery, setContentQuery] = useState("");
+  const [globalSearch, setGlobalSearch] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(null);
+  const [targetMessageIdx, setTargetMessageIdx] = useState(null);
   const [theme, setTheme] = useState("cream"); // cream | berry | basket | cloudy
   const [lang, setLang] = useState("zh");      // zh | en
   const previewScrollRef = useRef(null);
   const messageRefs = useRef(new Map());
-  const highlightTimer = useRef(null);
-  const searchIndexRef = useRef(new Map());
-  const [highlightedIdx, setHighlightedIdx] = useState(null);
 
   // Display name mapping（可自定义显示名）
   const [roleNameUser, setRoleNameUser] = useState("User");
@@ -30,6 +30,7 @@ export default function JsonConvoSplitter() {
   const [fileSuffix, setFileSuffix] = useState("");
 
   const t = (k) => (translations[lang]?.[k] ?? k);
+  const untitledText = t('untitled');
 
   // ---------- Helpers ----------
   const safe = (s) =>
@@ -37,74 +38,76 @@ export default function JsonConvoSplitter() {
       .replace(/[^0-9A-Za-z_\-\u4e00-\u9fa5]+/g, "_")
       .slice(0, 80);
 
-  const buildChain = (conv) => {
+  const safeStringify = useCallback((val) => {
+    try {
+      return typeof val === "string" ? val : JSON.stringify(val);
+    } catch {
+      return String(val ?? "");
+    }
+  }, []);
+
+  const extractMessageText = useCallback((message) => {
+    const content = message?.content;
+    const out = [];
+    const seen = new Set();
+    const collect = (val) => {
+      if (val == null) return;
+      if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+        out.push(String(val));
+        return;
+      }
+      if (Array.isArray(val)) {
+        val.forEach(collect);
+        return;
+      }
+      if (typeof val === "object") {
+        if (seen.has(val)) return;
+        seen.add(val);
+        let added = false;
+        if (typeof val.text === "string") { out.push(val.text); added = true; }
+        if (typeof val.content === "string") { out.push(val.content); added = true; }
+        if (Array.isArray(val.content)) { val.content.forEach(collect); added = true; }
+        if (Array.isArray(val.parts)) { val.parts.forEach(collect); added = true; }
+        if (typeof val.parts === "string") { out.push(val.parts); added = true; }
+        if (Array.isArray(val.messages)) { val.messages.forEach(collect); added = true; }
+        if (typeof val.value === "string") { out.push(val.value); added = true; }
+        if (typeof val.data === "string") { out.push(val.data); added = true; }
+        if (!added) {
+          const str = safeStringify(val);
+          if (str && str !== "[object Object]") out.push(str);
+        }
+      }
+    };
+    collect(content);
+    const text = out.join("\n").trim();
+    if (!text || text === "[object Object]") return "";
+    return text;
+  }, [safeStringify]);
+
+  const normalizeMessage = useCallback((msg) => {
+    if (!msg) return "";
+    if (typeof msg._text !== "string") {
+      msg._text = extractMessageText(msg);
+    }
+    return msg._text;
+  }, [extractMessageText]);
+
+  const buildChain = useCallback((conv) => {
     const chain = [];
     let nid = conv.current_node;
     while (nid) {
       const node = conv.mapping?.[nid];
       if (!node) break;
-      if (node.message) chain.push(node.message);
+      if (node.message) {
+        normalizeMessage(node.message);
+        chain.push(node.message);
+      }
       nid = node.parent;
     }
     return chain.reverse();
-  };
+  }, [normalizeMessage]);
 
-  const extractText = (message) => {
-    if (!message?.content) return "";
-    if (Array.isArray(message.content.parts)) return message.content.parts.join("\n\n");
-    if (typeof message.content.text === "string") return message.content.text;
-    return String(message.content);
-  };
-
-  const extractSearchText = (message) => {
-    const c = message?.content;
-    if (typeof c === "string") return c;
-    const chunks = [];
-    const collect = (val) => {
-      if (!val) return;
-      if (typeof val === "string") { chunks.push(val); return; }
-      if (Array.isArray(val)) { val.forEach(collect); return; }
-      if (typeof val === "object") {
-        if (typeof val.text === "string") { chunks.push(val.text); return; }
-        if (Array.isArray(val.parts)) { val.parts.forEach(collect); return; }
-      }
-    };
-    collect(c);
-    return chunks.join("\n");
-  };
-
-  const createSearchIndex = (messages) => {
-    const tokenMap = new Map();
-    messages.forEach((msg, idx) => {
-      const text = extractSearchText(msg).toLowerCase();
-      const tokens = text.split(/\s+/).filter(Boolean);
-      const uniq = new Set(tokens);
-      uniq.forEach((tok) => {
-        const list = tokenMap.get(tok);
-        if (list) list.push(idx);
-        else tokenMap.set(tok, [idx]);
-      });
-    });
-    return {
-      search: (q) => {
-        const terms = q.split(/\s+/).map((t) => t.trim()).filter(Boolean);
-        if (!terms.length) return [];
-        let pool = null;
-        for (const term of terms) {
-          const hits = tokenMap.get(term);
-          if (!hits) return [];
-          const hitSet = new Set(hits);
-          pool = pool
-            ? new Set([...pool].filter((i) => hitSet.has(i)))
-            : hitSet;
-          if (!pool.size) return [];
-        }
-        return pool ? Array.from(pool).sort((a, b) => a - b) : [];
-      }
-    };
-  };
-
-  const extractModel = (message) => {
+  const extractModel = useCallback((message) => {
     const candidates = [
       message?.model,
       message?.model_slug,
@@ -115,7 +118,7 @@ export default function JsonConvoSplitter() {
     ];
     const model = candidates.find((m) => typeof m === "string" && m.trim());
     return model ? model.trim() : "Unknown";
-  };
+  }, []);
 
   const roleDisplay = (role) => {
     const r = (role || "assistant").toLowerCase();
@@ -129,7 +132,7 @@ export default function JsonConvoSplitter() {
     return chain
       .map((m) => {
         const role = m.author?.role || "assistant";
-        const text = extractText(m);
+        const text = normalizeMessage(m);
         const displayRole = roleDisplay(role);
         return `**${displayRole}**:\n${text}`;
       })
@@ -213,7 +216,10 @@ export default function JsonConvoSplitter() {
       setConvos(json);
       setSelected(new Set(json.map((_, i) => i)));
       setPreviewIdx(json.length ? 0 : null);
-      searchIndexRef.current = new Map();
+      setTitleQuery("");
+      setContentQuery("");
+      setGlobalSearch(false);
+      setTargetMessageIdx(null);
     } catch (e) {
       alert((lang === 'zh' ? '无法解析 JSON：' : 'Cannot parse JSON: ') + e.message);
     }
@@ -236,12 +242,12 @@ export default function JsonConvoSplitter() {
 
   // visible list after filter
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = titleQuery.trim().toLowerCase();
     if (!q) return convos.map((c, idx) => ({ c, idx }));
     return convos
       .map((c, idx) => ({ c, idx }))
       .filter(({ c }) => String(c.title || "").toLowerCase().includes(q));
-  }, [convos, query]);
+  }, [convos, titleQuery]);
 
   const selectAllVisible = () => { const n = new Set(selected); visible.forEach(({ idx }) => n.add(idx)); setSelected(n); };
   const deselectAllVisible = () => { const n = new Set(selected); visible.forEach(({ idx }) => n.delete(idx)); setSelected(n); };
@@ -276,47 +282,86 @@ export default function JsonConvoSplitter() {
   };
 
   const previewConv = previewIdx != null ? convos[previewIdx] : null;
-  const previewMsgs = previewConv ? buildChain(previewConv) : [];
-  const previewSearchIndex = useMemo(() => {
-    if (!previewConv) return null;
-    let idx = searchIndexRef.current.get(previewIdx);
-    if (!idx) {
-      idx = createSearchIndex(previewMsgs);
-      searchIndexRef.current.set(previewIdx, idx);
-    }
-    return idx;
-  }, [previewConv, previewIdx, previewMsgs]);
-  const previewMsgsWithModel = useMemo(
-    () => previewMsgs.map((msg) => ({ msg, model: extractModel(msg) })),
-    [previewMsgs]
+  const previewMsgs = useMemo(
+    () => (previewConv ? buildChain(previewConv) : []),
+    [buildChain, previewConv]
   );
-  const matches = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q || previewIdx == null) return [];
-    const idx = previewSearchIndex;
-    if (!idx) return [];
-    return idx.search(q);
-  }, [previewIdx, previewSearchIndex, query]);
-  const matchSet = useMemo(() => new Set(matches), [matches]);
+  const previewMsgsWithModel = useMemo(
+    () => previewMsgs.map((msg, idx) => ({ msg, model: extractModel(msg), idx })),
+    [extractModel, previewMsgs]
+  );
+  const filteredPreviewMsgsWithModel = useMemo(() => {
+    const q = contentQuery.trim().toLowerCase();
+    if (!q || globalSearch) return previewMsgsWithModel;
+    return previewMsgsWithModel.filter(({ msg }) =>
+      (normalizeMessage(msg) || "").toLowerCase().includes(q)
+    );
+  }, [contentQuery, globalSearch, normalizeMessage, previewMsgsWithModel]);
+
+  const globalMatches = useMemo(() => {
+    const q = contentQuery.trim().toLowerCase();
+    if (!globalSearch || !q) return [];
+    const results = [];
+    convos.forEach((conv, convIdx) => {
+      const chain = buildChain(conv);
+      chain.forEach((msg, msgIdx) => {
+        const text = normalizeMessage(msg) || "";
+        if (text.toLowerCase().includes(q)) {
+          results.push({
+            convIdx,
+            msgIdx,
+            title: conv.title || untitledText,
+            snippet: text.slice(0, 140) + (text.length > 140 ? "…" : ""),
+          });
+        }
+      });
+    });
+    return results.slice(0, 40);
+  }, [buildChain, contentQuery, convos, globalSearch, normalizeMessage, untitledText]);
+
+  const stats = useMemo(() => {
+    if (!convos.length) return null;
+    let messageCount = 0;
+    let charCount = 0;
+    const roleCounts = {};
+    const assistantModelCounts = new Map();
+    convos.forEach((conv) => {
+      buildChain(conv).forEach((msg) => {
+        const text = normalizeMessage(msg) || "";
+        messageCount += 1;
+        charCount += text.length;
+        const role = (msg.author?.role || "assistant").toLowerCase();
+        roleCounts[role] = (roleCounts[role] || 0) + 1;
+        if (role === "assistant") {
+          const model = extractModel(msg);
+          assistantModelCounts.set(model, (assistantModelCounts.get(model) || 0) + 1);
+        }
+      });
+    });
+    const topModels = Array.from(assistantModelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    return {
+      conversationCount: convos.length,
+      messageCount,
+      charCount,
+      avgChars: messageCount ? Math.round((charCount / messageCount) * 10) / 10 : 0,
+      roleCounts,
+      topModels,
+    };
+  }, [buildChain, convos, extractModel, normalizeMessage]);
 
   useLayoutEffect(() => {
     messageRefs.current.clear();
     const el = previewScrollRef.current;
     if (!el) return;
     el.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    setHighlightedIdx(null);
   }, [previewIdx]);
 
-  useEffect(() => () => { if (highlightTimer.current) clearTimeout(highlightTimer.current); }, []);
-
-  const jumpToMessage = (i) => {
-    const el = messageRefs.current.get(i);
-    if (!el) return;
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
-    setHighlightedIdx(i);
-    if (highlightTimer.current) clearTimeout(highlightTimer.current);
-    highlightTimer.current = setTimeout(() => setHighlightedIdx(null), 1600);
-  };
+  useLayoutEffect(() => {
+    if (targetMessageIdx == null) return;
+    const el = messageRefs.current.get(targetMessageIdx);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setTargetMessageIdx(null);
+  }, [targetMessageIdx]);
 
   // ---------- Theme CSS ----------
   const css = theme === 'cream' ? cssCream
@@ -357,12 +402,72 @@ export default function JsonConvoSplitter() {
               <option value="basket">{t('themeBasket')}</option>
               <option value="cloudy">{t('themeCloudy')}</option>
             </select>
-            <input className="search" placeholder={t('filterByTitle')} value={query} onChange={(e)=>setQuery(e.target.value)} />
+            <input className="search" placeholder={t('filterByTitle')} value={titleQuery} onChange={(e)=>setTitleQuery(e.target.value)} />
+            <div className="search-group">
+              <span className="search-label">{t('searchInMessages')}</span>
+              <input
+                className="search"
+                placeholder={t('searchInMessages')}
+                value={contentQuery}
+                onChange={(e)=>setContentQuery(e.target.value)}
+              />
+              <label className="toggle">
+                <input type="checkbox" checked={globalSearch} onChange={(e)=>setGlobalSearch(e.target.checked)} />
+                <span>{t('searchAllConvos')}</span>
+              </label>
+            </div>
             <button onClick={selectAllVisible}>{t('selectAll')}</button>
             <button onClick={deselectAllVisible}>{t('deselectAll')}</button>
             <button onClick={invertVisible}>{t('invert')}</button>
           </div>
         </div>
+
+        {stats && (
+          <details className="stats-panel" open>
+            <summary className="stats-summary">{t('statsSummary')}</summary>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-label">{t('statConvos')}</div>
+                <div className="stat-value">{stats.conversationCount}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statMessages')}</div>
+                <div className="stat-value">{stats.messageCount}</div>
+                <div className="stat-sub">{t('statAvgChars')}: {stats.avgChars}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statChars')}</div>
+                <div className="stat-value">{stats.charCount}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statRoles')}</div>
+                <div className="bars">
+                  {Object.entries(stats.roleCounts).map(([role, count]) => (
+                    <div key={role} className="bar-row">
+                      <span className="bar-label">{role}</span>
+                      <div className="bar-track">
+                        <span
+                          className="bar-fill"
+                          style={{ width: `${Math.min(100, (count / stats.messageCount) * 100)}%` }}
+                          aria-hidden
+                        />
+                      </div>
+                      <span className="bar-count">{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statTopModels')}</div>
+                <ul className="stat-list">
+                  {stats.topModels.map(([model, count]) => (
+                    <li key={model}>{model}: {count}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </details>
+        )}
 
         {/* Role mapping + filename controls */}
         <div className="panel">
@@ -391,6 +496,30 @@ export default function JsonConvoSplitter() {
             <button className="primary" disabled={!selected.size} onClick={downloadZip}>{t('downloadZip')}</button>
           </div>
         </div>
+
+        {globalSearch && contentQuery.trim() && (
+          <div className="global-results">
+            <div className="gr-head">
+              <div className="gr-title">{t('searchAcrossAll')}</div>
+              <div className="gr-sub">{t('searchHint')}</div>
+            </div>
+            <div className="gr-list">
+              {globalMatches.length ? globalMatches.map((hit) => (
+                <button
+                  key={`${hit.convIdx}-${hit.msgIdx}`}
+                  className="gr-item"
+                  onClick={() => {
+                    setPreviewIdx(hit.convIdx);
+                    setTargetMessageIdx(hit.msgIdx);
+                  }}
+                >
+                  <div className="gr-line"><b>{hit.title}</b> · #{hit.msgIdx + 1}</div>
+                  <div className="gr-snippet">{hit.snippet}</div>
+                </button>
+              )) : <div className="gr-empty">{t('searchNoResult')}</div>}
+            </div>
+          </div>
+        )}
 
         {convos.length > 0 && (
           <div className="split">
@@ -434,30 +563,19 @@ export default function JsonConvoSplitter() {
                     <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
                     <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
                   </div>
-                  {matches.length > 0 && (
-                    <div className="pv-results">
-                      {matches.map((mIdx) => (
-                        <button key={mIdx} className="result-pill" onClick={() => jumpToMessage(mIdx)}>
-                          #{mIdx + 1}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   <div className="pv-body" ref={previewScrollRef}>
-                    {previewMsgsWithModel.map(({ msg, model }, i) => {
+                    {filteredPreviewMsgsWithModel.map(({ msg, model, idx }) => {
                       const role = msg.author?.role || "assistant";
-                      const text = extractText(msg);
+                      const text = normalizeMessage(msg);
                       const side = role === "assistant" ? "left" : "right";
                       const displayRole = roleDisplay(role);
-                      const highlight = highlightedIdx === i ? " highlight" : "";
-                      const isMatch = matchSet.has(i) ? " match" : "";
                       return (
                         <div
-                          key={i}
-                          className={`msg ${side}${highlight}${isMatch}`}
+                          key={idx}
+                          className={`msg ${side}`}
                           ref={(el) => {
-                            if (el) messageRefs.current.set(i, el);
-                            else messageRefs.current.delete(i);
+                            if (el) messageRefs.current.set(idx, el);
+                            else messageRefs.current.delete(idx);
                           }}
                         >
                           <div className="bubble">
@@ -502,6 +620,19 @@ const translations = {
     themeBasket: "花篮翻翻",
     themeCloudy: "云朵团团",
     filterByTitle: "按标题筛选…",
+    searchInMessages: "内容搜索",
+    searchAllConvos: "全局搜索",
+    searchAcrossAll: "跨对话搜索结果",
+    searchHint: "点击结果跳转至对应消息",
+    searchNoResult: "未找到匹配内容",
+    untitled: "未命名",
+    statsSummary: "导入统计",
+    statConvos: "对话数",
+    statMessages: "总消息数",
+    statChars: "总字符数",
+    statAvgChars: "平均字符",
+    statRoles: "角色分布",
+    statTopModels: "模型 Top3",
     selectAll: "全选(当前筛选)",
     deselectAll: "取消全选",
     invert: "反选",
@@ -531,6 +662,19 @@ const translations = {
     themeBasket: "Basket",
     themeCloudy: "Cloudy Puff",
     filterByTitle: "Filter by title…",
+    searchInMessages: "Search in messages",
+    searchAllConvos: "Search all conversations",
+    searchAcrossAll: "Global search results",
+    searchHint: "Click a result to jump to the message",
+    searchNoResult: "No matches found",
+    untitled: "Untitled",
+    statsSummary: "Import stats",
+    statConvos: "Conversations",
+    statMessages: "Messages total",
+    statChars: "Characters total",
+    statAvgChars: "Avg chars",
+    statRoles: "Role mix",
+    statTopModels: "Top 3 models",
     selectAll: "Select All (filtered)",
     deselectAll: "Deselect All",
     invert: "Invert",
@@ -569,6 +713,9 @@ body{margin:0;background:var(--bg);font-family:ui-sans-serif,system-ui,-apple-sy
 .select{height:34px;padding:0 8px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff}
 .search{height:34px;padding:6px 10px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff;color:var(--text);min-width:180px;outline:none}
 .search:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,200,203,.45)}
+.search-group{display:flex;align-items:center;gap:6px;flex:1}
+.search-label{font-size:12px;color:var(--muted);white-space:nowrap}
+.toggle{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);white-space:nowrap}
 button{height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff;color:var(--text);cursor:pointer}
 button:hover{border-color:var(--accent)}
 button.primary{background:var(--accent);border-color:transparent;color:#fff}
@@ -578,6 +725,31 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .panel .group{display:flex;flex-direction:column;gap:6px}
 .panel .group.rowBtns{grid-column:span 5;display:flex;flex-direction:row;gap:8px;align-items:center}
 .input{height:34px;padding:6px 10px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff}
+.stats-panel{margin-top:10px;border:1px solid rgba(110,46,52,.2);border-radius:12px;background:var(--card);box-shadow:0 4px 12px rgba(0,0,0,.04);padding:10px}
+.stats-panel summary{cursor:pointer;font-weight:700;color:var(--text);outline:none}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px}
+.stat-card{background:var(--card);border:1px solid rgba(110,46,52,.2);border-radius:12px;padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.04);display:flex;flex-direction:column;gap:6px}
+.stat-label{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.stat-value{font-size:22px;font-weight:700;color:var(--text)}
+.stat-sub{font-size:12px;color:var(--muted)}
+.stat-list{margin:0;padding-left:18px;color:var(--text);font-size:13px;line-height:1.6}
+.bars{display:flex;flex-direction:column;gap:6px}
+.bar-row{display:grid;grid-template-columns:auto 1fr auto;gap:6px;align-items:center;font-size:12px;color:var(--text)}
+.bar-label{font-weight:600}
+.bar-track{height:8px;background:rgba(110,46,52,.1);border-radius:999px;overflow:hidden;position:relative}
+.bar-fill{display:block;height:100%;background:var(--accent);border-radius:999px}
+.bar-count{color:var(--muted);font-variant-numeric:tabular-nums}
+.stat-pill{display:inline-block;padding:6px 10px;border-radius:20px;background:rgba(110,46,52,.08);color:var(--text);font-size:12px;border:1px solid rgba(110,46,52,.15)}
+.global-results{border:1px solid rgba(110,46,52,.2);border-radius:12px;background:var(--card);padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.04);margin-top:12px}
+.gr-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.gr-title{font-weight:700;color:var(--text)}
+.gr-sub{font-size:12px;color:var(--muted)}
+.gr-list{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto}
+.gr-item{border:1px solid rgba(110,46,52,.2);border-radius:10px;padding:8px 10px;text-align:left;background:#fff;color:var(--text);cursor:pointer}
+.gr-item:hover{border-color:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.gr-line{font-size:13px;margin-bottom:4px}
+.gr-snippet{font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+.gr-empty{font-size:12px;color:var(--muted)}
 .split{display:grid;grid-template-columns: 1fr 1fr;gap:12px;margin-top:12px}
 .list{border:1px solid rgba(110,46,52,.25);border-radius:12px;overflow:hidden;background:var(--card);max-height:540px;overflow-y:auto}
 .row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(110,46,52,.15);background:#fff}
@@ -673,4 +845,4 @@ const cssCloudy = cssBase
   .replaceAll('#2b2b2b', '#264C9D') // 正文字色
   .replaceAll('#B46C72', '#0E246A') // accent
   .replaceAll('#6E2E34', '#264C9D') // accent-600
-  .replaceAll('#FFECEF', '#C6D4EE'); // 气泡辅助色
+  .replaceAll('#FFECEF', '#C6D4EE'); // 氣泡辅助色
