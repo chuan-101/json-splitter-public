@@ -319,6 +319,33 @@ export default function JsonConvoSplitter() {
     };
   }, [buildChain, convos, extractModel, normalizeMessage]);
 
+  const stats = useMemo(() => {
+    if (!convos.length) return null;
+    let messageCount = 0;
+    let charCount = 0;
+    const roleCounts = {};
+    const modelCounts = new Map();
+    convos.forEach((conv) => {
+      buildChain(conv).forEach((msg) => {
+        const text = normalizeMessage(msg) || "";
+        messageCount += 1;
+        charCount += text.length;
+        const role = (msg.author?.role || "assistant").toLowerCase();
+        roleCounts[role] = (roleCounts[role] || 0) + 1;
+        const model = extractModel(msg);
+        modelCounts.set(model, (modelCounts.get(model) || 0) + 1);
+      });
+    });
+    const topModels = Array.from(modelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return {
+      messageCount,
+      charCount,
+      avgChars: messageCount ? Math.round((charCount / messageCount) * 10) / 10 : 0,
+      roleCounts,
+      topModels,
+    };
+  }, [buildChain, convos, extractModel, normalizeMessage]);
+
   useLayoutEffect(() => {
     const el = previewScrollRef.current;
     if (!el) return;
