@@ -307,10 +307,25 @@ export default function JsonConvoSplitter() {
   );
   const isPreviewMessageVisible = useCallback((msg) => {
     const role = (msg?.author?.role || "assistant").toLowerCase();
-    if (role === "system") return false;
+    if (role === "system" || role === "tool") return false;
 
     const text = (normalizeMessage(msg) || "").trimStart();
+
+    // Hide empty messages
+    if (!text) return false;
+
+    // Hide JSON-formatted messages
     if (text.startsWith('{"')) return false;
+
+    // Hide code execution artifacts
+    if (text.startsWith('from ') && text.includes('import ')) return false;
+    if (text.startsWith('import ')) return false;
+    if (text.startsWith('<<') && text.trimEnd().endsWith('>>')) return false;
+    if (text.startsWith('display(')) return false;
+    if (text.includes('/mnt/data/')) return false;
+
+    // Hide pure tuple/list outputs like ((829, 1536), (794, 1537))
+    if (/^\([\d\s,()]+\)$/.test(text.trim())) return false;
 
     return true;
   }, [normalizeMessage]);
@@ -371,6 +386,7 @@ export default function JsonConvoSplitter() {
     };
     convos.forEach((conv) => {
       buildChain(conv).forEach((msg) => {
+        if (!isPreviewMessageVisible(msg)) return;
         const text = normalizeMessage(msg) || "";
         messageCount += 1;
         charCount += text.length;
@@ -459,7 +475,7 @@ export default function JsonConvoSplitter() {
       currentStreakRange,
       activeDays: daySet.size,
     };
-  }, [buildChain, convos, extractModel, normalizeMessage]);
+  }, [buildChain, convos, extractModel, isPreviewMessageVisible, normalizeMessage]);
 
   useLayoutEffect(() => {
     const el = previewScrollRef.current;
