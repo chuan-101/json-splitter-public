@@ -52,6 +52,19 @@ export default function JsonConvoSplitter() {
     return String(message.content);
   };
 
+  const extractModel = (message) => {
+    const candidates = [
+      message?.model,
+      message?.model_slug,
+      message?.metadata?.model,
+      message?.metadata?.model_slug,
+      message?.message?.metadata?.model,
+      message?.message?.metadata?.model_slug,
+    ];
+    const model = candidates.find((m) => typeof m === "string" && m.trim());
+    return model ? model.trim() : "Unknown";
+  };
+
   const roleDisplay = (role) => {
     const r = (role || "assistant").toLowerCase();
     if (r === "user") return roleNameUser;
@@ -211,6 +224,16 @@ export default function JsonConvoSplitter() {
 
   const previewConv = previewIdx != null ? convos[previewIdx] : null;
   const previewMsgs = previewConv ? buildChain(previewConv) : [];
+  const previewMsgsWithModel = useMemo(
+    () => previewMsgs.map((msg) => ({ msg, model: extractModel(msg) })),
+    [previewMsgs]
+  );
+
+  useLayoutEffect(() => {
+    const el = previewScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [previewIdx]);
 
   useLayoutEffect(() => {
     const el = previewScrollRef.current;
@@ -335,15 +358,18 @@ export default function JsonConvoSplitter() {
                     <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
                   </div>
                   <div className="pv-body" ref={previewScrollRef}>
-                    {previewMsgs.map((m, i) => {
-                      const role = m.author?.role || "assistant";
-                      const text = extractText(m);
+                    {previewMsgsWithModel.map(({ msg, model }, i) => {
+                      const role = msg.author?.role || "assistant";
+                      const text = extractText(msg);
                       const side = role === "assistant" ? "left" : "right";
                       const displayRole = roleDisplay(role);
                       return (
                         <div key={i} className={`msg ${side}`}>
                           <div className="bubble">
-                            <div className="role">{displayRole}</div>
+                            <div className="meta-line">
+                              <div className="role">{displayRole}</div>
+                              <span className="model-badge">{model}</span>
+                            </div>
                             <div className="text">{text}</div>
                           </div>
                         </div>
@@ -478,7 +504,9 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .msg.right{justify-content:flex-end}
 .msg .bubble{max-width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(110,46,52,.2);background:var(--bubble-assist);box-shadow:0 2px 8px rgba(0,0,0,.04)}
 .msg.right .bubble{background:var(--bubble-user)}
-.msg .role{font-size:11px;color:#6E2E34;opacity:.8;margin-bottom:4px}
+.msg .meta-line{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
+.msg .role{font-size:11px;color:#6E2E34;opacity:.8;margin-bottom:0}
+.msg .model-badge{font-size:11px;color:var(--muted);padding:2px 6px;border-radius:6px;background:rgba(110,46,52,.06);border:1px solid rgba(110,46,52,.15)}
 .msg .text{white-space:pre-wrap;word-break:break-word}
 .pv-empty{padding:20px;color:var(--muted)}
 .foot{margin:16px 0;color:var(--muted);font-size:12px;text-align:center}
