@@ -305,13 +305,24 @@ export default function JsonConvoSplitter() {
     () => previewMsgs.map((msg, idx) => ({ msg, model: extractModel(msg), idx })),
     [extractModel, previewMsgs]
   );
+  const isPreviewMessageVisible = useCallback((msg) => {
+    const role = (msg?.author?.role || "assistant").toLowerCase();
+    if (role === "system") return false;
+
+    // Also hide user_editable_context / user_profile messages
+    const text = normalizeMessage(msg) || "";
+    if (text.startsWith('{"content_type":"user_editable_context"')) return false;
+    if (text.startsWith('{"content_type":"user_profile"')) return false;
+    if (text.startsWith('{"content_type":"thoughts"')) return false;
+
+    return true;
+  }, [normalizeMessage]);
   const nonSystemPreviewMsgsWithModel = useMemo(
     () =>
       previewMsgsWithModel.filter(({ msg }) => {
-        const role = (msg.author?.role || "assistant").toLowerCase();
-        return role !== "system";
+        return isPreviewMessageVisible(msg);
       }),
-    [previewMsgsWithModel]
+    [isPreviewMessageVisible, previewMsgsWithModel]
   );
   const filteredPreviewMsgsWithModel = useMemo(() => {
     const q = contentQuery.trim().toLowerCase();
@@ -650,7 +661,7 @@ export default function JsonConvoSplitter() {
                 const checked = selected.has(idx);
                 const { d } = fmtDate(c.create_time);
                 const date = d.toISOString().slice(0, 10);
-                const msgCount = buildChain(c).filter((msg) => (msg.author?.role || "assistant").toLowerCase() !== "system").length;
+                const msgCount = buildChain(c).filter(isPreviewMessageVisible).length;
                 const active = previewIdx === idx;
                 return (
                   <div
