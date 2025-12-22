@@ -8,10 +8,6 @@ import ConversationList from "./components/ConversationList";
 import PreviewPanel from "./components/PreviewPanel";
 import GlobalSearchResults from "./components/GlobalSearchResults";
 import "./styles/base.css";
-import "./styles/themes/cream.css";
-import "./styles/themes/berry.css";
-import "./styles/themes/basket.css";
-import "./styles/themes/cloudy.css";
 import zhTranslations from "./i18n/zh.json";
 import enTranslations from "./i18n/en.json";
 import { makeZip } from "./utils/zip";
@@ -36,7 +32,7 @@ export default function JsonConvoSplitter() {
   const [dragging, setDragging] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(null);
   const [targetMessageIdx, setTargetMessageIdx] = useState(null);
-  const [theme, setTheme] = useState("cream"); // cream | berry | basket | cloudy
+  const [theme, setTheme] = useState("ceramic"); // ceramic | stealth | industrial | retro
   const [lang, setLang] = useState("zh");      // zh | en
   const previewScrollRef = useRef(null);
   const messageRefs = useRef(new Map());
@@ -412,6 +408,10 @@ export default function JsonConvoSplitter() {
       activeDays: daySet.size,
     };
   }, [buildChain, convos, extractModel, isPreviewMessageVisible, normalizeMessage]);
+
+  useLayoutEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   useLayoutEffect(() => {
     const el = previewScrollRef.current;

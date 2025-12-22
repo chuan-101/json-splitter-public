@@ -28,10 +28,10 @@ export default function Toolbar({
           <option value="en">English</option>
         </select>
         <select className="select" value={theme} onChange={(e)=>setTheme(e.target.value)}>
-          <option value="cream">{t('themeCream')}</option>
-          <option value="berry">{t('themeBerry')}</option>
-          <option value="basket">{t('themeBasket')}</option>
-          <option value="cloudy">{t('themeCloudy')}</option>
+          <option value="ceramic">{t('themeCeramic')}</option>
+          <option value="stealth">{t('themeStealth')}</option>
+          <option value="industrial">{t('themeIndustrial')}</option>
+          <option value="retro">{t('themeRetro')}</option>
         </select>
         <input className="search" placeholder={t('filterByTitle')} value={titleQuery} onChange={(e)=>setTitleQuery(e.target.value)} />
         <div className="search-group">
