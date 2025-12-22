@@ -235,6 +235,12 @@ export default function JsonConvoSplitter() {
     el.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [previewIdx]);
 
+  useLayoutEffect(() => {
+    const el = previewScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [previewIdx]);
+
   // ---------- Theme CSS ----------
   const css = theme === 'cream' ? cssCream
     : theme === 'berry' ? cssBerry
