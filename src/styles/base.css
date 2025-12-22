@@ -181,6 +181,31 @@
   white-space: nowrap;
 }
 
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.icon-circle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--bg-screen) 70%, var(--shadow-dark) 30%);
+  box-shadow:
+    inset 4px 4px 8px var(--shadow-dark),
+    inset -4px -4px 8px var(--shadow-light);
+}
+
+.icon-label {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
 button {
   height: 40px;
   padding: 0 14px;

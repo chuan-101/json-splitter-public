@@ -19,6 +19,9 @@ export default function Toolbar({
   selectedCount,
   t,
 }) {
+  const toggleTheme = () => setTheme(theme === "ceramic" ? "stealth" : "ceramic");
+  const themeIsLight = theme === "ceramic";
+
   return (
     <div className="toolbar">
       <div className="stats">{t('total')} <b>{convosCount}</b> · {t('shown')} <b>{visibleCount}</b> · {t('selected')} <b>{selectedCount}</b></div>
@@ -27,12 +30,18 @@ export default function Toolbar({
           <option value="zh">简体中文</option>
           <option value="en">English</option>
         </select>
-        <select className="select" value={theme} onChange={(e)=>setTheme(e.target.value)}>
-          <option value="ceramic">{t('themeCeramic')}</option>
-          <option value="stealth">{t('themeStealth')}</option>
-          <option value="industrial">{t('themeIndustrial')}</option>
-          <option value="retro">{t('themeRetro')}</option>
-        </select>
+        <button
+          type="button"
+          className="icon-btn"
+          onClick={toggleTheme}
+          aria-label={`${t('toggleTheme')}: ${themeIsLight ? t('themeCeramic') : t('themeStealth')}`}
+          title={`${t('toggleTheme')}: ${themeIsLight ? t('themeCeramic') : t('themeStealth')}`}
+        >
+          <span className="icon-circle" aria-hidden="true">
+            {themeIsLight ? "🌞" : "🌜"}
+          </span>
+          <span className="icon-label">{themeIsLight ? t('themeCeramic') : t('themeStealth')}</span>
+        </button>
         <input className="search" placeholder={t('filterByTitle')} value={titleQuery} onChange={(e)=>setTitleQuery(e.target.value)} />
         <div className="search-group">
           <span className="search-label">{t('searchInMessages')}</span>
