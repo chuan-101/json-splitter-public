@@ -56,25 +56,25 @@
 .outer[data-theme="industrial"],
 .app-shell[data-theme="industrial"],
 :root[data-theme="industrial"] {
-  --bg-body: #ffc600;
-  --bg-screen: #e6b200;
-  --shadow-light: #ffe066;
-  --shadow-dark: #cc9e00;
-  --text-primary: #333333;
-  --text-accent: #333333;
-  --text-screen: #1a1a1a;
+  --bg-body: #ffd54f; /* A warmer, sunflower/mango yellow */
+  --bg-screen: #f9a825; /* Deeper, brownish-yellow for contrast */
+  --shadow-light: #ffeda6; /* Soft light yellow highlight */
+  --shadow-dark: #b37d00; /* Warm, deep orange shadow (not black!) */
+  --text-primary: #3e2723; /* Dark brown text instead of harsh black */
+  --text-accent: #3e2723;
+  --text-screen: #3e2723;
 }
 
 .outer[data-theme="retro"],
 .app-shell[data-theme="retro"],
 :root[data-theme="retro"] {
-  --bg-body: #e0d5f5;
-  --bg-screen: #8bac0f;
-  --shadow-light: #f3effc;
-  --shadow-dark: #cbbadd;
-  --text-primary: #2d2540;
-  --text-accent: #2d2540;
-  --text-screen: #0f380f;
+  --bg-body: #c7ceff; /* A softer, pastel violet-blue */
+  --bg-screen: #a5b4fc; /* Slightly deeper screen inset */
+  --shadow-light: #e0e7ff; /* Very light lavender highlight */
+  --shadow-dark: #6366f1; /* Rich, deep indigo shadow for volume */
+  --text-primary: #312e81; /* Deep indigo text */
+  --text-accent: #312e81;
+  --text-screen: #ffffff; /* White text looks better on this darker screen */
 }
 
 * {
