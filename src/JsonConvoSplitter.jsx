@@ -317,6 +317,9 @@ export default function JsonConvoSplitter() {
     // Hide JSON-formatted messages
     if (text.startsWith('{"')) return false;
 
+    // Hide regeneration feedback instructions
+    if (text.startsWith('The user provided feedback on a previous completion')) return false;
+
     // Hide code execution artifacts
     if (text.startsWith('from ') && text.includes('import ')) return false;
     if (text.startsWith('import ')) return false;
