@@ -140,6 +140,8 @@ export default function JsonConvoSplitter() {
     return roleNameAssistant; // assistant/tool/function 都归为助手侧显示
   };
 
+  const formatRange = (range) => (range ? `${range.start} \u2192 ${range.end}` : "");
+
   const toMarkdown = (conv) => {
     const chain = buildChain(conv);
     return chain
@@ -341,19 +343,23 @@ export default function JsonConvoSplitter() {
     const roleCounts = {};
     const assistantModelCounts = new Map();
     const daySet = new Set();
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
     const toDayKey = (sec) => {
-      const d = new Date((sec || Date.now() / 1000) * 1000);
-      const y = d.getFullYear();
-      const m = String(d.getMonth() + 1).padStart(2, "0");
-      const day = String(d.getDate()).padStart(2, "0");
-      return `${y}-${m}-${day}`;
+      if (!Number.isFinite(sec)) return null;
+      return new Date(sec * 1000).toLocaleDateString("en-CA");
+    };
+    const dateToKey = (date) => startOfDay(date).toLocaleDateString("en-CA");
+    const dayKeyToDate = (key) => {
+      const [y, m, d] = key.split("-").map(Number);
+      return new Date(y, m - 1, d);
     };
     convos.forEach((conv) => {
-      daySet.add(toDayKey(conv.create_time));
       buildChain(conv).forEach((msg) => {
         const text = normalizeMessage(msg) || "";
         messageCount += 1;
         charCount += text.length;
+        const timestamp = toDayKey(Number(msg.create_time));
+        if (timestamp) daySet.add(timestamp);
         const role = (msg.author?.role || "assistant").toLowerCase();
         if (role === "user") userCharCount += text.length;
         if (role === "assistant") assistantCharCount += text.length;
@@ -365,39 +371,60 @@ export default function JsonConvoSplitter() {
       });
     });
     const sortedDays = Array.from(daySet).sort();
-    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-    const dayKeyToDate = (key) => {
-      const [y, m, d] = key.split("-").map(Number);
-      return new Date(y, m - 1, d);
-    };
     let longestStreak = 0;
     let streak = 0;
+    let streakStartKey = null;
     let prevDate = null;
+    let longestStreakRange = null;
     sortedDays.forEach((key) => {
       const date = dayKeyToDate(key);
       if (prevDate) {
         const diffDays = Math.round((startOfDay(date) - startOfDay(prevDate)) / 86400000);
-        streak = diffDays === 1 ? streak + 1 : 1;
+        if (diffDays === 1) {
+          streak += 1;
+        } else {
+          streak = 1;
+          streakStartKey = key;
+        }
       } else {
         streak = 1;
+        streakStartKey = key;
       }
-      longestStreak = Math.max(longestStreak, streak);
+      if (streak > longestStreak) {
+        longestStreak = streak;
+        longestStreakRange = { start: streakStartKey, end: key };
+      }
       prevDate = date;
     });
     let currentStreak = null;
+    let currentStreakRange = null;
     if (sortedDays.length) {
       const today = startOfDay(new Date());
+      const todayKey = dateToKey(today);
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayKey = dateToKey(yesterday);
       const latestDate = dayKeyToDate(sortedDays[sortedDays.length - 1]);
       const diffFromToday = Math.round((today - startOfDay(latestDate)) / 86400000);
-      if (diffFromToday <= 1) {
-        let cursor = latestDate;
-        let count = 0;
-        while (daySet.has(toDayKey(cursor.getTime() / 1000))) {
-          count += 1;
-          cursor = new Date(cursor);
-          cursor.setDate(cursor.getDate() - 1);
+      const latestKey = dateToKey(latestDate);
+      if ((diffFromToday === 0 && latestKey === todayKey) || (diffFromToday === 1 && latestKey === yesterdayKey)) {
+        let count = 1;
+        let startKey = latestKey;
+        for (let i = sortedDays.length - 2; i >= 0; i -= 1) {
+          const currentKey = sortedDays[i];
+          const nextKey = sortedDays[i + 1];
+          const currentDate = dayKeyToDate(currentKey);
+          const nextDate = dayKeyToDate(nextKey);
+          const diffDays = Math.round((startOfDay(nextDate) - startOfDay(currentDate)) / 86400000);
+          if (diffDays === 1) {
+            count += 1;
+            startKey = currentKey;
+          } else {
+            break;
+          }
         }
         currentStreak = count;
+        currentStreakRange = { start: startKey, end: latestKey };
       }
     }
     const topModels = Array.from(assistantModelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -412,6 +439,9 @@ export default function JsonConvoSplitter() {
       topModels,
       longestStreak,
       currentStreak,
+      longestStreakRange,
+      currentStreakRange,
+      activeDays: daySet.size,
     };
   }, [buildChain, convos, extractModel, normalizeMessage]);
 
@@ -508,9 +538,19 @@ export default function JsonConvoSplitter() {
               <div className="stat-card">
                 <div className="stat-label">{t('statLongestStreak')}</div>
                 <div className="stat-value">{stats.longestStreak} {t('days')}</div>
-                {stats.currentStreak != null && (
-                  <div className="stat-sub">{t('statCurrentStreak')}: {stats.currentStreak} {t('days')}</div>
+                {stats.longestStreakRange && (
+                  <div className="stat-sub">{formatRange(stats.longestStreakRange)}</div>
                 )}
+                {stats.currentStreak != null && (
+                  <div className="stat-sub">
+                    {t('statCurrentStreak')}: {stats.currentStreak} {t('days')}
+                    {stats.currentStreakRange ? ` (${formatRange(stats.currentStreakRange)})` : ""}
+                  </div>
+                )}
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statActiveDays')}</div>
+                <div className="stat-value">{stats.activeDays}</div>
               </div>
               <div className="stat-card">
                 <div className="stat-label">{t('statRoles')}</div>
@@ -700,7 +740,7 @@ const translations = {
     searchNoResult: "未找到匹配内容",
     untitled: "未命名",
     statsSummary: "导入统计",
-    statConvos: "对话数",
+    statConvos: "会话数",
     statMessages: "总消息数",
     statChars: "总字符数",
     statUserChars: "用户",
@@ -710,6 +750,7 @@ const translations = {
     statTopModels: "模型 Top3",
     statLongestStreak: "最长连续天数",
     statCurrentStreak: "当前连续天数",
+    statActiveDays: "活跃天数",
     days: "天",
     selectAll: "全选(当前筛选)",
     deselectAll: "取消全选",
@@ -757,6 +798,7 @@ const translations = {
     statTopModels: "Top 3 models",
     statLongestStreak: "Longest Streak",
     statCurrentStreak: "Current Streak",
+    statActiveDays: "Active Days",
     days: "days",
     selectAll: "Select All (filtered)",
     deselectAll: "Deselect All",
