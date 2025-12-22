@@ -56,25 +56,25 @@
 .outer[data-theme="industrial"],
 .app-shell[data-theme="industrial"],
 :root[data-theme="industrial"] {
-  --bg-body: #ffc600;
-  --bg-screen: #e6b200;
-  --shadow-light: #ffe066;
-  --shadow-dark: #cc9e00;
-  --text-primary: #333333;
-  --text-accent: #333333;
-  --text-screen: #1a1a1a;
+  --bg-body: #e3f2fd; /* Very pale, airy blue */
+  --bg-screen: #bbdefb; /* Slightly deeper blue inset for contrast */
+  --shadow-light: #ffffff; /* Pure white highlight for softness */
+  --shadow-dark: #b0bec5; /* A soft, blue-grey shadow, not harsh */
+  --text-primary: #546e7a; /* Soft slate grey text, easy on eyes */
+  --text-accent: #546e7a;
+  --text-screen: #37474f; /* Slightly darker text for screen readability */
 }
 
 .outer[data-theme="retro"],
 .app-shell[data-theme="retro"],
 :root[data-theme="retro"] {
-  --bg-body: #e0d5f5;
-  --bg-screen: #8bac0f;
-  --shadow-light: #f3effc;
-  --shadow-dark: #cbbadd;
-  --text-primary: #2d2540;
-  --text-accent: #2d2540;
-  --text-screen: #0f380f;
+  --bg-body: #fce4ec; /* Very pale, gentle pink */
+  --bg-screen: #f8bbd0; /* Slightly deeper pink inset */
+  --shadow-light: #fff0f5; /* Soft creamy white highlight */
+  --shadow-dark: #dabba9; /* A warm, muted rose-grey shadow */
+  --text-primary: #785c64; /* Soft warm grey/brown text */
+  --text-accent: #785c64;
+  --text-screen: #4a3b3f;
 }
 
 * {
