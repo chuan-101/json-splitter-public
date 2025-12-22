@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Conversation Splitter – Public Edition
@@ -16,10 +16,6 @@ export default function JsonConvoSplitter() {
   const [theme, setTheme] = useState("cream"); // cream | berry | basket | cloudy
   const [lang, setLang] = useState("zh");      // zh | en
   const previewScrollRef = useRef(null);
-  const messageRefs = useRef(new Map());
-  const highlightTimer = useRef(null);
-  const searchIndexRef = useRef(new Map());
-  const [highlightedIdx, setHighlightedIdx] = useState(null);
 
   // Display name mapping（可自定义显示名）
   const [roleNameUser, setRoleNameUser] = useState("User");
@@ -105,37 +101,6 @@ export default function JsonConvoSplitter() {
       nid = node.parent;
     }
     return chain.reverse();
-  }, [normalizeMessage]);
-
-  const createSearchIndex = useCallback((messages) => {
-    const tokenMap = new Map();
-    messages.forEach((msg, idx) => {
-      const text = (normalizeMessage(msg) || "").toLowerCase();
-      const tokens = text.split(/\s+/).filter(Boolean);
-      const uniq = new Set(tokens);
-      uniq.forEach((tok) => {
-        const list = tokenMap.get(tok);
-        if (list) list.push(idx);
-        else tokenMap.set(tok, [idx]);
-      });
-    });
-    return {
-      search: (q) => {
-        const terms = q.split(/\s+/).map((t) => t.trim()).filter(Boolean);
-        if (!terms.length) return [];
-        let pool = null;
-        for (const term of terms) {
-          const hits = tokenMap.get(term);
-          if (!hits) return [];
-          const hitSet = new Set(hits);
-          pool = pool
-            ? new Set([...pool].filter((i) => hitSet.has(i)))
-            : hitSet;
-          if (!pool.size) return [];
-        }
-        return pool ? Array.from(pool).sort((a, b) => a - b) : [];
-      }
-    };
   }, [normalizeMessage]);
 
   const extractModel = useCallback((message) => {
@@ -249,7 +214,6 @@ export default function JsonConvoSplitter() {
       setPreviewIdx(json.length ? 0 : null);
       setTitleQuery("");
       setContentQuery("");
-      searchIndexRef.current = new Map();
     } catch (e) {
       alert((lang === 'zh' ? '无法解析 JSON：' : 'Cannot parse JSON: ') + e.message);
     }
@@ -316,27 +280,44 @@ export default function JsonConvoSplitter() {
     () => (previewConv ? buildChain(previewConv) : []),
     [buildChain, previewConv]
   );
-  const previewSearchIndex = useMemo(() => {
-    if (!previewConv) return null;
-    let idx = searchIndexRef.current.get(previewIdx);
-    if (!idx) {
-      idx = createSearchIndex(previewMsgs);
-      searchIndexRef.current.set(previewIdx, idx);
-    }
-    return idx;
-  }, [createSearchIndex, previewConv, previewIdx, previewMsgs]);
   const previewMsgsWithModel = useMemo(
     () => previewMsgs.map((msg) => ({ msg, model: extractModel(msg) })),
     [extractModel, previewMsgs]
   );
-  const matches = useMemo(() => {
+  const filteredPreviewMsgsWithModel = useMemo(() => {
     const q = contentQuery.trim().toLowerCase();
-    if (!q || previewIdx == null) return [];
-    const idx = previewSearchIndex;
-    if (!idx) return [];
-    return idx.search(q);
-  }, [contentQuery, previewIdx, previewSearchIndex]);
-  const matchSet = useMemo(() => new Set(matches), [matches]);
+    if (!q) return previewMsgsWithModel;
+    return previewMsgsWithModel.filter(({ msg }) =>
+      (normalizeMessage(msg) || "").toLowerCase().includes(q)
+    );
+  }, [contentQuery, normalizeMessage, previewMsgsWithModel]);
+
+  const stats = useMemo(() => {
+    if (!convos.length) return null;
+    let messageCount = 0;
+    let charCount = 0;
+    const roleCounts = {};
+    const modelCounts = new Map();
+    convos.forEach((conv) => {
+      buildChain(conv).forEach((msg) => {
+        const text = normalizeMessage(msg) || "";
+        messageCount += 1;
+        charCount += text.length;
+        const role = (msg.author?.role || "assistant").toLowerCase();
+        roleCounts[role] = (roleCounts[role] || 0) + 1;
+        const model = extractModel(msg);
+        modelCounts.set(model, (modelCounts.get(model) || 0) + 1);
+      });
+    });
+    const topModels = Array.from(modelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return {
+      messageCount,
+      charCount,
+      avgChars: messageCount ? Math.round((charCount / messageCount) * 10) / 10 : 0,
+      roleCounts,
+      topModels,
+    };
+  }, [buildChain, convos, extractModel, normalizeMessage]);
 
   const stats = useMemo(() => {
     if (!convos.length) return null;
@@ -366,23 +347,10 @@ export default function JsonConvoSplitter() {
   }, [buildChain, convos, extractModel, normalizeMessage]);
 
   useLayoutEffect(() => {
-    messageRefs.current.clear();
     const el = previewScrollRef.current;
     if (!el) return;
     el.scrollTo({ top: 0, left: 0, behavior: "auto" });
-    setHighlightedIdx(null);
   }, [previewIdx]);
-
-  useEffect(() => () => { if (highlightTimer.current) clearTimeout(highlightTimer.current); }, []);
-
-  const jumpToMessage = (i) => {
-    const el = messageRefs.current.get(i);
-    if (!el) return;
-    el.scrollIntoView({ block: "center", behavior: "smooth" });
-    setHighlightedIdx(i);
-    if (highlightTimer.current) clearTimeout(highlightTimer.current);
-    highlightTimer.current = setTimeout(() => setHighlightedIdx(null), 1600);
-  };
 
   // ---------- Theme CSS ----------
   const css = theme === 'cream' ? cssCream
@@ -424,7 +392,15 @@ export default function JsonConvoSplitter() {
               <option value="cloudy">{t('themeCloudy')}</option>
             </select>
             <input className="search" placeholder={t('filterByTitle')} value={titleQuery} onChange={(e)=>setTitleQuery(e.target.value)} />
-            <input className="search" placeholder={t('filterByContent')} value={contentQuery} onChange={(e)=>setContentQuery(e.target.value)} />
+            <div className="search-group">
+              <span className="search-label">{t('searchInMessages')}</span>
+              <input
+                className="search"
+                placeholder={t('searchInMessages')}
+                value={contentQuery}
+                onChange={(e)=>setContentQuery(e.target.value)}
+              />
+            </div>
             <button onClick={selectAllVisible}>{t('selectAll')}</button>
             <button onClick={deselectAllVisible}>{t('deselectAll')}</button>
             <button onClick={invertVisible}>{t('invert')}</button>
@@ -546,31 +522,16 @@ export default function JsonConvoSplitter() {
                     <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
                     <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
                   </div>
-                  {matches.length > 0 && (
-                    <div className="pv-results">
-                      {matches.map((mIdx) => (
-                        <button key={mIdx} className="result-pill" onClick={() => jumpToMessage(mIdx)}>
-                          #{mIdx + 1}
-                        </button>
-                      ))}
-                    </div>
-                  )}
                   <div className="pv-body" ref={previewScrollRef}>
-                    {previewMsgsWithModel.map(({ msg, model }, i) => {
+                    {filteredPreviewMsgsWithModel.map(({ msg, model }, i) => {
                       const role = msg.author?.role || "assistant";
                       const text = normalizeMessage(msg);
                       const side = role === "assistant" ? "left" : "right";
                       const displayRole = roleDisplay(role);
-                      const highlight = highlightedIdx === i ? " highlight" : "";
-                      const isMatch = matchSet.has(i) ? " match" : "";
                       return (
                         <div
                           key={i}
-                          className={`msg ${side}${highlight}${isMatch}`}
-                          ref={(el) => {
-                            if (el) messageRefs.current.set(i, el);
-                            else messageRefs.current.delete(i);
-                          }}
+                          className={`msg ${side}`}
                         >
                           <div className="bubble">
                             <div className="meta-line">
@@ -614,10 +575,7 @@ const translations = {
     themeBasket: "花篮翻翻",
     themeCloudy: "云朵团团",
     filterByTitle: "按标题筛选…",
-    filterByContent: "按内容搜索…",
-    contentSearch: "内容搜索",
-    contentSearchHint: "输入关键词高亮右侧消息",
-    contentSearchEmpty: "未输入关键词",
+    searchInMessages: "内容搜索",
     statMessages: "总消息数",
     statChars: "总字符数",
     statAvgChars: "平均字符",
@@ -652,10 +610,7 @@ const translations = {
     themeBasket: "Basket",
     themeCloudy: "Cloudy Puff",
     filterByTitle: "Filter by title…",
-    filterByContent: "Search content…",
-    contentSearch: "Content search",
-    contentSearchHint: "Enter keywords to highlight messages",
-    contentSearchEmpty: "No query yet",
+    searchInMessages: "Search in messages",
     statMessages: "Messages total",
     statChars: "Characters total",
     statAvgChars: "Avg chars",
@@ -699,6 +654,8 @@ body{margin:0;background:var(--bg);font-family:ui-sans-serif,system-ui,-apple-sy
 .select{height:34px;padding:0 8px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff}
 .search{height:34px;padding:6px 10px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff;color:var(--text);min-width:180px;outline:none}
 .search:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,200,203,.45)}
+.search-group{display:flex;align-items:center;gap:6px;flex:1}
+.search-label{font-size:12px;color:var(--muted);white-space:nowrap}
 button{height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff;color:var(--text);cursor:pointer}
 button:hover{border-color:var(--accent)}
 button.primary{background:var(--accent);border-color:transparent;color:#fff}
