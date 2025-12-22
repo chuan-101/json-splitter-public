@@ -309,11 +309,8 @@ export default function JsonConvoSplitter() {
     const role = (msg?.author?.role || "assistant").toLowerCase();
     if (role === "system") return false;
 
-    // Also hide user_editable_context / user_profile messages
-    const text = normalizeMessage(msg) || "";
-    if (text.startsWith('{"content_type":"user_editable_context"')) return false;
-    if (text.startsWith('{"content_type":"user_profile"')) return false;
-    if (text.startsWith('{"content_type":"thoughts"')) return false;
+    const text = (normalizeMessage(msg) || "").trimStart();
+    if (text.startsWith('{"')) return false;
 
     return true;
   }, [normalizeMessage]);
