@@ -52,6 +52,23 @@ export default function JsonConvoSplitter() {
     return String(message.content);
   };
 
+  const extractSearchText = (message) => {
+    const c = message?.content;
+    if (typeof c === "string") return c;
+    const chunks = [];
+    const collect = (val) => {
+      if (!val) return;
+      if (typeof val === "string") { chunks.push(val); return; }
+      if (Array.isArray(val)) { val.forEach(collect); return; }
+      if (typeof val === "object") {
+        if (typeof val.text === "string") { chunks.push(val.text); return; }
+        if (Array.isArray(val.parts)) { val.parts.forEach(collect); return; }
+      }
+    };
+    collect(c);
+    return chunks.join("\n");
+  };
+
   const extractModel = (message) => {
     const candidates = [
       message?.model,
@@ -228,12 +245,11 @@ export default function JsonConvoSplitter() {
     () => previewMsgs.map((msg) => ({ msg, model: extractModel(msg) })),
     [previewMsgs]
   );
-
-  useLayoutEffect(() => {
-    const el = previewScrollRef.current;
-    if (!el) return;
-    el.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [previewIdx]);
+  const previewFilteredMsgs = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return previewMsgsWithModel;
+    return previewMsgsWithModel.filter(({ msg }) => extractSearchText(msg).toLowerCase().includes(q));
+  }, [previewMsgsWithModel, query]);
 
   useLayoutEffect(() => {
     const el = previewScrollRef.current;
@@ -358,7 +374,7 @@ export default function JsonConvoSplitter() {
                     <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
                   </div>
                   <div className="pv-body" ref={previewScrollRef}>
-                    {previewMsgsWithModel.map(({ msg, model }, i) => {
+                    {previewFilteredMsgs.map(({ msg, model }, i) => {
                       const role = msg.author?.role || "assistant";
                       const text = extractText(msg);
                       const side = role === "assistant" ? "left" : "right";
