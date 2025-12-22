@@ -92,6 +92,19 @@ export default function JsonConvoSplitter() {
     return msg._text;
   }, [extractMessageText]);
 
+  const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const highlightMatches = useCallback((text) => {
+    const q = contentQuery.trim();
+    const source = text == null ? "" : String(text);
+    if (!q) return source;
+    const regex = new RegExp(`(${escapeRegExp(q)})`, "gi");
+    return source
+      .split(regex)
+      .map((part, idx) =>
+        idx % 2 === 1 ? <mark key={idx} className="highlight-match">{part}</mark> : part
+      );
+  }, [contentQuery]);
+
   const buildChain = useCallback((conv) => {
     const chain = [];
     let nid = conv.current_node;
@@ -323,14 +336,27 @@ export default function JsonConvoSplitter() {
     if (!convos.length) return null;
     let messageCount = 0;
     let charCount = 0;
+    let userCharCount = 0;
+    let assistantCharCount = 0;
     const roleCounts = {};
     const assistantModelCounts = new Map();
+    const daySet = new Set();
+    const toDayKey = (sec) => {
+      const d = new Date((sec || Date.now() / 1000) * 1000);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
     convos.forEach((conv) => {
+      daySet.add(toDayKey(conv.create_time));
       buildChain(conv).forEach((msg) => {
         const text = normalizeMessage(msg) || "";
         messageCount += 1;
         charCount += text.length;
         const role = (msg.author?.role || "assistant").toLowerCase();
+        if (role === "user") userCharCount += text.length;
+        if (role === "assistant") assistantCharCount += text.length;
         roleCounts[role] = (roleCounts[role] || 0) + 1;
         if (role === "assistant") {
           const model = extractModel(msg);
@@ -338,14 +364,54 @@ export default function JsonConvoSplitter() {
         }
       });
     });
+    const sortedDays = Array.from(daySet).sort();
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dayKeyToDate = (key) => {
+      const [y, m, d] = key.split("-").map(Number);
+      return new Date(y, m - 1, d);
+    };
+    let longestStreak = 0;
+    let streak = 0;
+    let prevDate = null;
+    sortedDays.forEach((key) => {
+      const date = dayKeyToDate(key);
+      if (prevDate) {
+        const diffDays = Math.round((startOfDay(date) - startOfDay(prevDate)) / 86400000);
+        streak = diffDays === 1 ? streak + 1 : 1;
+      } else {
+        streak = 1;
+      }
+      longestStreak = Math.max(longestStreak, streak);
+      prevDate = date;
+    });
+    let currentStreak = null;
+    if (sortedDays.length) {
+      const today = startOfDay(new Date());
+      const latestDate = dayKeyToDate(sortedDays[sortedDays.length - 1]);
+      const diffFromToday = Math.round((today - startOfDay(latestDate)) / 86400000);
+      if (diffFromToday <= 1) {
+        let cursor = latestDate;
+        let count = 0;
+        while (daySet.has(toDayKey(cursor.getTime() / 1000))) {
+          count += 1;
+          cursor = new Date(cursor);
+          cursor.setDate(cursor.getDate() - 1);
+        }
+        currentStreak = count;
+      }
+    }
     const topModels = Array.from(assistantModelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
     return {
       conversationCount: convos.length,
       messageCount,
       charCount,
+      userCharCount,
+      assistantCharCount,
       avgChars: messageCount ? Math.round((charCount / messageCount) * 10) / 10 : 0,
       roleCounts,
       topModels,
+      longestStreak,
+      currentStreak,
     };
   }, [buildChain, convos, extractModel, normalizeMessage]);
 
@@ -436,7 +502,15 @@ export default function JsonConvoSplitter() {
               </div>
               <div className="stat-card">
                 <div className="stat-label">{t('statChars')}</div>
-                <div className="stat-value">{stats.charCount}</div>
+                <div className="stat-sub">{t('statUserChars')}: {stats.userCharCount}</div>
+                <div className="stat-sub">{t('statAssistantChars')}: {stats.assistantCharCount}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statLongestStreak')}</div>
+                <div className="stat-value">{stats.longestStreak} {t('days')}</div>
+                {stats.currentStreak != null && (
+                  <div className="stat-sub">{t('statCurrentStreak')}: {stats.currentStreak} {t('days')}</div>
+                )}
               </div>
               <div className="stat-card">
                 <div className="stat-label">{t('statRoles')}</div>
@@ -582,7 +656,7 @@ export default function JsonConvoSplitter() {
                               <div className="role">{displayRole}</div>
                               <span className="model-badge">{model}</span>
                             </div>
-                            <div className="text">{text}</div>
+                            <div className="text">{highlightMatches(text)}</div>
                           </div>
                         </div>
                       );
@@ -629,9 +703,14 @@ const translations = {
     statConvos: "对话数",
     statMessages: "总消息数",
     statChars: "总字符数",
+    statUserChars: "用户",
+    statAssistantChars: "助手",
     statAvgChars: "平均字符",
     statRoles: "角色分布",
     statTopModels: "模型 Top3",
+    statLongestStreak: "最长连续天数",
+    statCurrentStreak: "当前连续天数",
+    days: "天",
     selectAll: "全选(当前筛选)",
     deselectAll: "取消全选",
     invert: "反选",
@@ -671,9 +750,14 @@ const translations = {
     statConvos: "Conversations",
     statMessages: "Messages total",
     statChars: "Characters total",
+    statUserChars: "User",
+    statAssistantChars: "Assistant",
     statAvgChars: "Avg chars",
     statRoles: "Role mix",
     statTopModels: "Top 3 models",
+    statLongestStreak: "Longest Streak",
+    statCurrentStreak: "Current Streak",
+    days: "days",
     selectAll: "Select All (filtered)",
     deselectAll: "Deselect All",
     invert: "Invert",
@@ -780,6 +864,7 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .msg .model-badge{font-size:11px;color:var(--muted);padding:2px 6px;border-radius:6px;background:rgba(110,46,52,.06);border:1px solid rgba(110,46,52,.15)}
 .msg .text{white-space:pre-wrap;word-break:break-word}
 .msg.highlight .text{color:var(--accent-600)}
+.highlight-match{background:#FFE066;border-radius:2px;padding:0 2px}
 .pv-empty{padding:20px;color:var(--muted)}
 @keyframes flash{0%{background:var(--bubble-assist)}50%{background:#fff6f7}100%{background:var(--bubble-assist)}}
 .foot{margin:16px 0;color:var(--muted);font-size:12px;text-align:center}
