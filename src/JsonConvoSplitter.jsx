@@ -350,7 +350,6 @@ export default function JsonConvoSplitter() {
   }, [buildChain, convos, extractModel, normalizeMessage]);
 
   useLayoutEffect(() => {
-    messageRefs.current.clear();
     const el = previewScrollRef.current;
     if (!el) return;
     el.scrollTo({ top: 0, left: 0, behavior: "auto" });
