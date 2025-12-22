@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Conversation Splitter – Public Edition
@@ -14,6 +14,7 @@ export default function JsonConvoSplitter() {
   const [previewIdx, setPreviewIdx] = useState(null);
   const [theme, setTheme] = useState("cream"); // cream | berry | basket | cloudy
   const [lang, setLang] = useState("zh");      // zh | en
+  const previewScrollRef = useRef(null);
 
   // Display name mapping（可自定义显示名）
   const [roleNameUser, setRoleNameUser] = useState("User");
@@ -211,6 +212,12 @@ export default function JsonConvoSplitter() {
   const previewConv = previewIdx != null ? convos[previewIdx] : null;
   const previewMsgs = previewConv ? buildChain(previewConv) : [];
 
+  useLayoutEffect(() => {
+    const el = previewScrollRef.current;
+    if (!el) return;
+    el.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [previewIdx]);
+
   // ---------- Theme CSS ----------
   const css = theme === 'cream' ? cssCream
     : theme === 'berry' ? cssBerry
@@ -327,7 +334,7 @@ export default function JsonConvoSplitter() {
                     <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
                     <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
                   </div>
-                  <div className="pv-body">
+                  <div className="pv-body" ref={previewScrollRef}>
                     {previewMsgs.map((m, i) => {
                       const role = m.author?.role || "assistant";
                       const text = extractText(m);
