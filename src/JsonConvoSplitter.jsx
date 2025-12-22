@@ -11,11 +11,14 @@ export default function JsonConvoSplitter() {
   const [selected, setSelected] = useState(new Set());
   const [titleQuery, setTitleQuery] = useState("");
   const [contentQuery, setContentQuery] = useState("");
+  const [globalSearch, setGlobalSearch] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(null);
+  const [targetMessageIdx, setTargetMessageIdx] = useState(null);
   const [theme, setTheme] = useState("cream"); // cream | berry | basket | cloudy
   const [lang, setLang] = useState("zh");      // zh | en
   const previewScrollRef = useRef(null);
+  const messageRefs = useRef(new Map());
 
   // Display name mapping（可自定义显示名）
   const [roleNameUser, setRoleNameUser] = useState("User");
@@ -27,6 +30,7 @@ export default function JsonConvoSplitter() {
   const [fileSuffix, setFileSuffix] = useState("");
 
   const t = (k) => (translations[lang]?.[k] ?? k);
+  const untitledText = t('untitled');
 
   // ---------- Helpers ----------
   const safe = (s) =>
@@ -214,6 +218,8 @@ export default function JsonConvoSplitter() {
       setPreviewIdx(json.length ? 0 : null);
       setTitleQuery("");
       setContentQuery("");
+      setGlobalSearch(false);
+      setTargetMessageIdx(null);
     } catch (e) {
       alert((lang === 'zh' ? '无法解析 JSON：' : 'Cannot parse JSON: ') + e.message);
     }
@@ -281,23 +287,44 @@ export default function JsonConvoSplitter() {
     [buildChain, previewConv]
   );
   const previewMsgsWithModel = useMemo(
-    () => previewMsgs.map((msg) => ({ msg, model: extractModel(msg) })),
+    () => previewMsgs.map((msg, idx) => ({ msg, model: extractModel(msg), idx })),
     [extractModel, previewMsgs]
   );
   const filteredPreviewMsgsWithModel = useMemo(() => {
     const q = contentQuery.trim().toLowerCase();
-    if (!q) return previewMsgsWithModel;
+    if (!q || globalSearch) return previewMsgsWithModel;
     return previewMsgsWithModel.filter(({ msg }) =>
       (normalizeMessage(msg) || "").toLowerCase().includes(q)
     );
-  }, [contentQuery, normalizeMessage, previewMsgsWithModel]);
+  }, [contentQuery, globalSearch, normalizeMessage, previewMsgsWithModel]);
+
+  const globalMatches = useMemo(() => {
+    const q = contentQuery.trim().toLowerCase();
+    if (!globalSearch || !q) return [];
+    const results = [];
+    convos.forEach((conv, convIdx) => {
+      const chain = buildChain(conv);
+      chain.forEach((msg, msgIdx) => {
+        const text = normalizeMessage(msg) || "";
+        if (text.toLowerCase().includes(q)) {
+          results.push({
+            convIdx,
+            msgIdx,
+            title: conv.title || untitledText,
+            snippet: text.slice(0, 140) + (text.length > 140 ? "…" : ""),
+          });
+        }
+      });
+    });
+    return results.slice(0, 40);
+  }, [buildChain, contentQuery, convos, globalSearch, normalizeMessage, untitledText]);
 
   const stats = useMemo(() => {
     if (!convos.length) return null;
     let messageCount = 0;
     let charCount = 0;
     const roleCounts = {};
-    const modelCounts = new Map();
+    const assistantModelCounts = new Map();
     convos.forEach((conv) => {
       buildChain(conv).forEach((msg) => {
         const text = normalizeMessage(msg) || "";
@@ -305,39 +332,15 @@ export default function JsonConvoSplitter() {
         charCount += text.length;
         const role = (msg.author?.role || "assistant").toLowerCase();
         roleCounts[role] = (roleCounts[role] || 0) + 1;
-        const model = extractModel(msg);
-        modelCounts.set(model, (modelCounts.get(model) || 0) + 1);
+        if (role === "assistant") {
+          const model = extractModel(msg);
+          assistantModelCounts.set(model, (assistantModelCounts.get(model) || 0) + 1);
+        }
       });
     });
-    const topModels = Array.from(modelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const topModels = Array.from(assistantModelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 5);
     return {
-      messageCount,
-      charCount,
-      avgChars: messageCount ? Math.round((charCount / messageCount) * 10) / 10 : 0,
-      roleCounts,
-      topModels,
-    };
-  }, [buildChain, convos, extractModel, normalizeMessage]);
-
-  const stats = useMemo(() => {
-    if (!convos.length) return null;
-    let messageCount = 0;
-    let charCount = 0;
-    const roleCounts = {};
-    const modelCounts = new Map();
-    convos.forEach((conv) => {
-      buildChain(conv).forEach((msg) => {
-        const text = normalizeMessage(msg) || "";
-        messageCount += 1;
-        charCount += text.length;
-        const role = (msg.author?.role || "assistant").toLowerCase();
-        roleCounts[role] = (roleCounts[role] || 0) + 1;
-        const model = extractModel(msg);
-        modelCounts.set(model, (modelCounts.get(model) || 0) + 1);
-      });
-    });
-    const topModels = Array.from(modelCounts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    return {
+      conversationCount: convos.length,
       messageCount,
       charCount,
       avgChars: messageCount ? Math.round((charCount / messageCount) * 10) / 10 : 0,
@@ -351,6 +354,13 @@ export default function JsonConvoSplitter() {
     if (!el) return;
     el.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [previewIdx]);
+
+  useLayoutEffect(() => {
+    if (targetMessageIdx == null) return;
+    const el = messageRefs.current.get(targetMessageIdx);
+    if (el) el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setTargetMessageIdx(null);
+  }, [targetMessageIdx]);
 
   // ---------- Theme CSS ----------
   const css = theme === 'cream' ? cssCream
@@ -400,6 +410,10 @@ export default function JsonConvoSplitter() {
                 value={contentQuery}
                 onChange={(e)=>setContentQuery(e.target.value)}
               />
+              <label className="toggle">
+                <input type="checkbox" checked={globalSearch} onChange={(e)=>setGlobalSearch(e.target.checked)} />
+                <span>{t('searchAllConvos')}</span>
+              </label>
             </div>
             <button onClick={selectAllVisible}>{t('selectAll')}</button>
             <button onClick={deselectAllVisible}>{t('deselectAll')}</button>
@@ -408,48 +422,50 @@ export default function JsonConvoSplitter() {
         </div>
 
         {stats && (
-          <div className="stats-panel">
-            <div className="stat-card">
-              <div className="stat-label">{t('statMessages')}</div>
-              <div className="stat-value">{stats.messageCount}</div>
-              <div className="stat-sub">{t('statAvgChars')}: {stats.avgChars}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">{t('statChars')}</div>
-              <div className="stat-value">{stats.charCount}</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">{t('statRoles')}</div>
-              <div className="bars">
-                {Object.entries(stats.roleCounts).map(([role, count]) => (
-                  <div key={role} className="bar-row">
-                    <span className="bar-label">{role}</span>
-                    <div className="bar-track">
-                      <span
-                        className="bar-fill"
-                        style={{ width: `${Math.min(100, (count / stats.messageCount) * 100)}%` }}
-                        aria-hidden
-                      />
+          <details className="stats-panel" open>
+            <summary className="stats-summary">{t('statsSummary')}</summary>
+            <div className="stats-grid">
+              <div className="stat-card">
+                <div className="stat-label">{t('statConvos')}</div>
+                <div className="stat-value">{stats.conversationCount}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statMessages')}</div>
+                <div className="stat-value">{stats.messageCount}</div>
+                <div className="stat-sub">{t('statAvgChars')}: {stats.avgChars}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statChars')}</div>
+                <div className="stat-value">{stats.charCount}</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statRoles')}</div>
+                <div className="bars">
+                  {Object.entries(stats.roleCounts).map(([role, count]) => (
+                    <div key={role} className="bar-row">
+                      <span className="bar-label">{role}</span>
+                      <div className="bar-track">
+                        <span
+                          className="bar-fill"
+                          style={{ width: `${Math.min(100, (count / stats.messageCount) * 100)}%` }}
+                          aria-hidden
+                        />
+                      </div>
+                      <span className="bar-count">{count}</span>
                     </div>
-                    <span className="bar-count">{count}</span>
-                  </div>
-                ))}
+                  ))}
+                </div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-label">{t('statTopModels')}</div>
+                <ul className="stat-list">
+                  {stats.topModels.map(([model, count]) => (
+                    <li key={model}>{model}: {count}</li>
+                  ))}
+                </ul>
               </div>
             </div>
-            <div className="stat-card">
-              <div className="stat-label">{t('statTopModels')}</div>
-              <ul className="stat-list">
-                {stats.topModels.map(([model, count]) => (
-                  <li key={model}>{model}: {count}</li>
-                ))}
-              </ul>
-            </div>
-            <div className="stat-card">
-              <div className="stat-label">{t('contentSearch')}</div>
-              <div className="stat-sub">{t('contentSearchHint')}</div>
-              <div className="stat-pill">{contentQuery ? `"${contentQuery}"` : t('contentSearchEmpty')}</div>
-            </div>
-          </div>
+          </details>
         )}
 
         {/* Role mapping + filename controls */}
@@ -479,6 +495,30 @@ export default function JsonConvoSplitter() {
             <button className="primary" disabled={!selected.size} onClick={downloadZip}>{t('downloadZip')}</button>
           </div>
         </div>
+
+        {globalSearch && contentQuery.trim() && (
+          <div className="global-results">
+            <div className="gr-head">
+              <div className="gr-title">{t('searchAcrossAll')}</div>
+              <div className="gr-sub">{t('searchHint')}</div>
+            </div>
+            <div className="gr-list">
+              {globalMatches.length ? globalMatches.map((hit) => (
+                <button
+                  key={`${hit.convIdx}-${hit.msgIdx}`}
+                  className="gr-item"
+                  onClick={() => {
+                    setPreviewIdx(hit.convIdx);
+                    setTargetMessageIdx(hit.msgIdx);
+                  }}
+                >
+                  <div className="gr-line"><b>{hit.title}</b> · #{hit.msgIdx + 1}</div>
+                  <div className="gr-snippet">{hit.snippet}</div>
+                </button>
+              )) : <div className="gr-empty">{t('searchNoResult')}</div>}
+            </div>
+          </div>
+        )}
 
         {convos.length > 0 && (
           <div className="split">
@@ -523,15 +563,19 @@ export default function JsonConvoSplitter() {
                     <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
                   </div>
                   <div className="pv-body" ref={previewScrollRef}>
-                    {filteredPreviewMsgsWithModel.map(({ msg, model }, i) => {
+                    {filteredPreviewMsgsWithModel.map(({ msg, model, idx }) => {
                       const role = msg.author?.role || "assistant";
                       const text = normalizeMessage(msg);
                       const side = role === "assistant" ? "left" : "right";
                       const displayRole = roleDisplay(role);
                       return (
                         <div
-                          key={i}
+                          key={idx}
                           className={`msg ${side}`}
+                          ref={(el) => {
+                            if (el) messageRefs.current.set(idx, el);
+                            else messageRefs.current.delete(idx);
+                          }}
                         >
                           <div className="bubble">
                             <div className="meta-line">
@@ -576,6 +620,13 @@ const translations = {
     themeCloudy: "云朵团团",
     filterByTitle: "按标题筛选…",
     searchInMessages: "内容搜索",
+    searchAllConvos: "全局搜索",
+    searchAcrossAll: "跨对话搜索结果",
+    searchHint: "点击结果跳转至对应消息",
+    searchNoResult: "未找到匹配内容",
+    untitled: "未命名",
+    statsSummary: "导入统计",
+    statConvos: "对话数",
     statMessages: "总消息数",
     statChars: "总字符数",
     statAvgChars: "平均字符",
@@ -611,6 +662,13 @@ const translations = {
     themeCloudy: "Cloudy Puff",
     filterByTitle: "Filter by title…",
     searchInMessages: "Search in messages",
+    searchAllConvos: "Search all conversations",
+    searchAcrossAll: "Global search results",
+    searchHint: "Click a result to jump to the message",
+    searchNoResult: "No matches found",
+    untitled: "Untitled",
+    statsSummary: "Import stats",
+    statConvos: "Conversations",
     statMessages: "Messages total",
     statChars: "Characters total",
     statAvgChars: "Avg chars",
@@ -656,6 +714,7 @@ body{margin:0;background:var(--bg);font-family:ui-sans-serif,system-ui,-apple-sy
 .search:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,200,203,.45)}
 .search-group{display:flex;align-items:center;gap:6px;flex:1}
 .search-label{font-size:12px;color:var(--muted);white-space:nowrap}
+.toggle{display:flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);white-space:nowrap}
 button{height:34px;padding:0 12px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff;color:var(--text);cursor:pointer}
 button:hover{border-color:var(--accent)}
 button.primary{background:var(--accent);border-color:transparent;color:#fff}
@@ -665,7 +724,9 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .panel .group{display:flex;flex-direction:column;gap:6px}
 .panel .group.rowBtns{grid-column:span 5;display:flex;flex-direction:row;gap:8px;align-items:center}
 .input{height:34px;padding:6px 10px;border-radius:10px;border:1px solid rgba(110,46,52,.25);background:#fff}
-.stats-panel{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px}
+.stats-panel{margin-top:10px;border:1px solid rgba(110,46,52,.2);border-radius:12px;background:var(--card);box-shadow:0 4px 12px rgba(0,0,0,.04);padding:10px}
+.stats-panel summary{cursor:pointer;font-weight:700;color:var(--text);outline:none}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:10px}
 .stat-card{background:var(--card);border:1px solid rgba(110,46,52,.2);border-radius:12px;padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.04);display:flex;flex-direction:column;gap:6px}
 .stat-label{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
 .stat-value{font-size:22px;font-weight:700;color:var(--text)}
@@ -678,6 +739,16 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .bar-fill{display:block;height:100%;background:var(--accent);border-radius:999px}
 .bar-count{color:var(--muted);font-variant-numeric:tabular-nums}
 .stat-pill{display:inline-block;padding:6px 10px;border-radius:20px;background:rgba(110,46,52,.08);color:var(--text);font-size:12px;border:1px solid rgba(110,46,52,.15)}
+.global-results{border:1px solid rgba(110,46,52,.2);border-radius:12px;background:var(--card);padding:12px;box-shadow:0 4px 12px rgba(0,0,0,.04);margin-top:12px}
+.gr-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.gr-title{font-weight:700;color:var(--text)}
+.gr-sub{font-size:12px;color:var(--muted)}
+.gr-list{display:flex;flex-direction:column;gap:8px;max-height:220px;overflow:auto}
+.gr-item{border:1px solid rgba(110,46,52,.2);border-radius:10px;padding:8px 10px;text-align:left;background:#fff;color:var(--text);cursor:pointer}
+.gr-item:hover{border-color:var(--accent);box-shadow:0 2px 8px rgba(0,0,0,.06)}
+.gr-line{font-size:13px;margin-bottom:4px}
+.gr-snippet{font-size:12px;color:var(--muted);white-space:pre-wrap;word-break:break-word}
+.gr-empty{font-size:12px;color:var(--muted)}
 .split{display:grid;grid-template-columns: 1fr 1fr;gap:12px;margin-top:12px}
 .list{border:1px solid rgba(110,46,52,.25);border-radius:12px;overflow:hidden;background:var(--card);max-height:540px;overflow-y:auto}
 .row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid rgba(110,46,52,.15);background:#fff}
@@ -773,4 +844,4 @@ const cssCloudy = cssBase
   .replaceAll('#2b2b2b', '#264C9D') // 正文字色
   .replaceAll('#B46C72', '#0E246A') // accent
   .replaceAll('#6E2E34', '#264C9D') // accent-600
-  .replaceAll('#FFECEF', '#C6D4EE'); // 气泡辅助色
+  .replaceAll('#FFECEF', '#C6D4EE'); // 氣泡辅助色
