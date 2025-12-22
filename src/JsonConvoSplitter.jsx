@@ -305,13 +305,21 @@ export default function JsonConvoSplitter() {
     () => previewMsgs.map((msg, idx) => ({ msg, model: extractModel(msg), idx })),
     [extractModel, previewMsgs]
   );
+  const nonSystemPreviewMsgsWithModel = useMemo(
+    () =>
+      previewMsgsWithModel.filter(({ msg }) => {
+        const role = (msg.author?.role || "assistant").toLowerCase();
+        return role !== "system";
+      }),
+    [previewMsgsWithModel]
+  );
   const filteredPreviewMsgsWithModel = useMemo(() => {
     const q = contentQuery.trim().toLowerCase();
-    if (!q || globalSearch) return previewMsgsWithModel;
-    return previewMsgsWithModel.filter(({ msg }) =>
+    if (!q || globalSearch) return nonSystemPreviewMsgsWithModel;
+    return nonSystemPreviewMsgsWithModel.filter(({ msg }) =>
       (normalizeMessage(msg) || "").toLowerCase().includes(q)
     );
-  }, [contentQuery, globalSearch, normalizeMessage, previewMsgsWithModel]);
+  }, [contentQuery, globalSearch, nonSystemPreviewMsgsWithModel, normalizeMessage]);
 
   const globalMatches = useMemo(() => {
     const q = contentQuery.trim().toLowerCase();
@@ -642,7 +650,7 @@ export default function JsonConvoSplitter() {
                 const checked = selected.has(idx);
                 const { d } = fmtDate(c.create_time);
                 const date = d.toISOString().slice(0, 10);
-                const msgCount = buildChain(c).length;
+                const msgCount = buildChain(c).filter((msg) => (msg.author?.role || "assistant").toLowerCase() !== "system").length;
                 const active = previewIdx === idx;
                 return (
                   <div
@@ -674,7 +682,7 @@ export default function JsonConvoSplitter() {
                 <>
                   <div className="pv-head">
                     <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
-                    <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
+                    <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {nonSystemPreviewMsgsWithModel.length} {t('messages')}</div>
                   </div>
                   <div className="pv-body" ref={previewScrollRef}>
                     {filteredPreviewMsgsWithModel.map(({ msg, model, idx }) => {
