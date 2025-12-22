@@ -1,0 +1,11 @@
+.outer[data-theme="basket"] {
+  --bg: #F3EAF7;
+  --card: #fff;
+  --muted: #9C7CA5;
+  --text: #2E2435;
+  --accent: #C89BCB;
+  --accent-600: #7A4E7E;
+  --ring: #FFC8CB;
+  --bubble-user: #fff;
+  --bubble-assist: #F8F0FA;
+}
