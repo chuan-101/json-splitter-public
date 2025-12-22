@@ -32,7 +32,7 @@ export default function JsonConvoSplitter() {
   const [dragging, setDragging] = useState(false);
   const [previewIdx, setPreviewIdx] = useState(null);
   const [targetMessageIdx, setTargetMessageIdx] = useState(null);
-  const [theme, setTheme] = useState("ceramic"); // ceramic | stealth | industrial | retro
+  const [theme, setTheme] = useState("ceramic"); // ceramic | stealth
   const [lang, setLang] = useState("zh");      // zh | en
   const previewScrollRef = useRef(null);
   const messageRefs = useRef(new Map());
