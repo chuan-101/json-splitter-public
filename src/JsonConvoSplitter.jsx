@@ -6,6 +6,10 @@ import "./styles/themes/basket.css";
 import "./styles/themes/cloudy.css";
 import zhTranslations from "./i18n/zh.json";
 import enTranslations from "./i18n/en.json";
+import { makeZip } from "./utils/zip";
+import { safe, safeStringify } from "./utils/string";
+import { fmtDate } from "./utils/date";
+import { triggerDownload } from "./utils/download";
 
 const translations = { zh: zhTranslations, en: enTranslations };
 
@@ -42,19 +46,6 @@ export default function JsonConvoSplitter() {
   const untitledText = t('untitled');
 
   // ---------- Helpers ----------
-  const safe = (s) =>
-    (s || "Untitled")
-      .replace(/[^0-9A-Za-z_\-\u4e00-\u9fa5]+/g, "_")
-      .slice(0, 80);
-
-  const safeStringify = useCallback((val) => {
-    try {
-      return typeof val === "string" ? val : JSON.stringify(val);
-    } catch {
-      return String(val ?? "");
-    }
-  }, []);
-
   const extractMessageText = useCallback((message) => {
     const content = message?.content;
     const out = [];
@@ -161,74 +152,6 @@ export default function JsonConvoSplitter() {
         return `**${displayRole}**:\n${text}`;
       })
       .join("\n\n\n");
-  };
-
-  const triggerDownload = (blob, name) => {
-    const url = URL.createObjectURL(blob);
-    const a = Object.assign(document.createElement("a"), { href: url, download: name });
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const fmtDate = (sec) => {
-    const d = new Date((sec || Date.now() / 1000) * 1000);
-    const iso = d.toISOString().slice(0, 16).replace(/[:T]/g, "-");
-    return { d, iso };
-  };
-
-  // ---------- Minimal ZIP (store) ----------
-  const crc32Table = useMemo(() => {
-    const t = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      t[i] = c >>> 0;
-    }
-    return t;
-  }, []);
-  const crc32 = (u8) => {
-    let c = 0xFFFFFFFF;
-    for (let i = 0; i < u8.length; i++) c = crc32Table[(c ^ u8[i]) & 0xFF] ^ (c >>> 8);
-    return (c ^ 0xFFFFFFFF) >>> 0;
-  };
-  const le16 = (n) => new Uint8Array([n & 255, (n >>> 8) & 255]);
-  const le32 = (n) => new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
-  const concatBytes = (parts) => {
-    const size = parts.reduce((s, p) => s + p.length, 0);
-    const out = new Uint8Array(size);
-    let pos = 0;
-    for (const p of parts) { out.set(p, pos); pos += p.length; }
-    return out;
-  };
-  const makeZip = async (files) => {
-    const chunks = [];
-    const central = [];
-    let offset = 0;
-    const enc = new TextEncoder();
-    for (const f of files) {
-      const nameBytes = enc.encode(f.name);
-      const data = f.data;
-      const crc = crc32(data);
-      const hdr = [
-        le32(0x04034b50), le16(20), le16(0), le16(0), le16(0), le16(0),
-        le32(crc), le32(data.length), le32(data.length), le16(nameBytes.length), le16(0)
-      ];
-      const local = concatBytes([...hdr, nameBytes, data]);
-      chunks.push(local);
-      const cenHdr = [
-        le32(0x02014b50), le16(20), le16(20), le16(0), le16(0), le16(0), le16(0),
-        le32(crc), le32(data.length), le32(data.length), le16(nameBytes.length), le16(0), le16(0), le16(0), le16(0),
-        le32(offset)
-      ];
-      central.push(concatBytes([...cenHdr, nameBytes]));
-      offset += local.length;
-    }
-    const centralDir = concatBytes(central);
-    const end = concatBytes([le32(0x06054b50), le16(0), le16(0), le16(files.length), le16(files.length), le32(centralDir.length), le32(offset), le16(0)]);
-    const zipBytes = concatBytes([...chunks, centralDir, end]);
-    return new Blob([zipBytes], { type: 'application/zip' });
   };
 
   // ---------- Events ----------
