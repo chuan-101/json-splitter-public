@@ -305,13 +305,21 @@ export default function JsonConvoSplitter() {
     () => previewMsgs.map((msg, idx) => ({ msg, model: extractModel(msg), idx })),
     [extractModel, previewMsgs]
   );
+  const isPreviewMessageVisible = useCallback((msg) => {
+    const role = (msg?.author?.role || "assistant").toLowerCase();
+    if (role === "system") return false;
+
+    const text = (normalizeMessage(msg) || "").trimStart();
+    if (text.startsWith('{"')) return false;
+
+    return true;
+  }, [normalizeMessage]);
   const nonSystemPreviewMsgsWithModel = useMemo(
     () =>
       previewMsgsWithModel.filter(({ msg }) => {
-        const role = (msg.author?.role || "assistant").toLowerCase();
-        return role !== "system";
+        return isPreviewMessageVisible(msg);
       }),
-    [previewMsgsWithModel]
+    [isPreviewMessageVisible, previewMsgsWithModel]
   );
   const filteredPreviewMsgsWithModel = useMemo(() => {
     const q = contentQuery.trim().toLowerCase();
@@ -650,7 +658,7 @@ export default function JsonConvoSplitter() {
                 const checked = selected.has(idx);
                 const { d } = fmtDate(c.create_time);
                 const date = d.toISOString().slice(0, 10);
-                const msgCount = buildChain(c).filter((msg) => (msg.author?.role || "assistant").toLowerCase() !== "system").length;
+                const msgCount = buildChain(c).filter(isPreviewMessageVisible).length;
                 const active = previewIdx === idx;
                 return (
                   <div
