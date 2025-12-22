@@ -1,0 +1,11 @@
+.outer[data-theme="cream"] {
+  --bg: #F5E6D1;
+  --card: #fff;
+  --muted: #5E7B9B;
+  --text: #2b2b2b;
+  --accent: #B46C72;
+  --accent-600: #6E2E34;
+  --ring: #FFC8CB;
+  --bubble-user: #fff;
+  --bubble-assist: #FFECEF;
+}

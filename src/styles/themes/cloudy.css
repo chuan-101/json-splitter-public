@@ -1,0 +1,11 @@
+.outer[data-theme="cloudy"] {
+  --bg: #C6D4EE;
+  --card: #fff;
+  --muted: #5A97CA;
+  --text: #264C9D;
+  --accent: #0E246A;
+  --accent-600: #264C9D;
+  --ring: #FFC8CB;
+  --bubble-user: #fff;
+  --bubble-assist: #C6D4EE;
+}

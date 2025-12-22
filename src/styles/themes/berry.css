@@ -1,0 +1,11 @@
+.outer[data-theme="berry"] {
+  --bg: #284139;
+  --card: #111A19;
+  --muted: #BB6830;
+  --text: #F8D794;
+  --accent: #BB6830;
+  --accent-600: #F8D794;
+  --ring: #FFC8CB;
+  --bubble-user: #111A19;
+  --bubble-assist: #2f5146;
+}
