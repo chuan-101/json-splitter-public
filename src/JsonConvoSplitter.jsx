@@ -313,6 +313,7 @@ export default function JsonConvoSplitter() {
     const text = normalizeMessage(msg) || "";
     if (text.startsWith('{"content_type":"user_editable_context"')) return false;
     if (text.startsWith('{"content_type":"user_profile"')) return false;
+    if (text.startsWith('{"content_type":"thoughts"')) return false;
 
     return true;
   }, [normalizeMessage]);
