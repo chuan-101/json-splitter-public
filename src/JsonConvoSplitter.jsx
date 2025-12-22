@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 /**
  * Conversation Splitter – Public Edition
@@ -15,6 +15,10 @@ export default function JsonConvoSplitter() {
   const [theme, setTheme] = useState("cream"); // cream | berry | basket | cloudy
   const [lang, setLang] = useState("zh");      // zh | en
   const previewScrollRef = useRef(null);
+  const messageRefs = useRef(new Map());
+  const highlightTimer = useRef(null);
+  const searchIndexRef = useRef(new Map());
+  const [highlightedIdx, setHighlightedIdx] = useState(null);
 
   // Display name mapping（可自定义显示名）
   const [roleNameUser, setRoleNameUser] = useState("User");
@@ -67,6 +71,37 @@ export default function JsonConvoSplitter() {
     };
     collect(c);
     return chunks.join("\n");
+  };
+
+  const createSearchIndex = (messages) => {
+    const tokenMap = new Map();
+    messages.forEach((msg, idx) => {
+      const text = extractSearchText(msg).toLowerCase();
+      const tokens = text.split(/\s+/).filter(Boolean);
+      const uniq = new Set(tokens);
+      uniq.forEach((tok) => {
+        const list = tokenMap.get(tok);
+        if (list) list.push(idx);
+        else tokenMap.set(tok, [idx]);
+      });
+    });
+    return {
+      search: (q) => {
+        const terms = q.split(/\s+/).map((t) => t.trim()).filter(Boolean);
+        if (!terms.length) return [];
+        let pool = null;
+        for (const term of terms) {
+          const hits = tokenMap.get(term);
+          if (!hits) return [];
+          const hitSet = new Set(hits);
+          pool = pool
+            ? new Set([...pool].filter((i) => hitSet.has(i)))
+            : hitSet;
+          if (!pool.size) return [];
+        }
+        return pool ? Array.from(pool).sort((a, b) => a - b) : [];
+      }
+    };
   };
 
   const extractModel = (message) => {
@@ -178,6 +213,7 @@ export default function JsonConvoSplitter() {
       setConvos(json);
       setSelected(new Set(json.map((_, i) => i)));
       setPreviewIdx(json.length ? 0 : null);
+      searchIndexRef.current = new Map();
     } catch (e) {
       alert((lang === 'zh' ? '无法解析 JSON：' : 'Cannot parse JSON: ') + e.message);
     }
@@ -241,21 +277,46 @@ export default function JsonConvoSplitter() {
 
   const previewConv = previewIdx != null ? convos[previewIdx] : null;
   const previewMsgs = previewConv ? buildChain(previewConv) : [];
+  const previewSearchIndex = useMemo(() => {
+    if (!previewConv) return null;
+    let idx = searchIndexRef.current.get(previewIdx);
+    if (!idx) {
+      idx = createSearchIndex(previewMsgs);
+      searchIndexRef.current.set(previewIdx, idx);
+    }
+    return idx;
+  }, [previewConv, previewIdx, previewMsgs]);
   const previewMsgsWithModel = useMemo(
     () => previewMsgs.map((msg) => ({ msg, model: extractModel(msg) })),
     [previewMsgs]
   );
-  const previewFilteredMsgs = useMemo(() => {
+  const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return previewMsgsWithModel;
-    return previewMsgsWithModel.filter(({ msg }) => extractSearchText(msg).toLowerCase().includes(q));
-  }, [previewMsgsWithModel, query]);
+    if (!q || previewIdx == null) return [];
+    const idx = previewSearchIndex;
+    if (!idx) return [];
+    return idx.search(q);
+  }, [previewIdx, previewSearchIndex, query]);
+  const matchSet = useMemo(() => new Set(matches), [matches]);
 
   useLayoutEffect(() => {
+    messageRefs.current.clear();
     const el = previewScrollRef.current;
     if (!el) return;
     el.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    setHighlightedIdx(null);
   }, [previewIdx]);
+
+  useEffect(() => () => { if (highlightTimer.current) clearTimeout(highlightTimer.current); }, []);
+
+  const jumpToMessage = (i) => {
+    const el = messageRefs.current.get(i);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+    setHighlightedIdx(i);
+    if (highlightTimer.current) clearTimeout(highlightTimer.current);
+    highlightTimer.current = setTimeout(() => setHighlightedIdx(null), 1600);
+  };
 
   // ---------- Theme CSS ----------
   const css = theme === 'cream' ? cssCream
@@ -373,14 +434,32 @@ export default function JsonConvoSplitter() {
                     <div className="pv-title" title={previewConv.title || "Untitled"}>{previewConv.title || "Untitled"}</div>
                     <div className="pv-sub">{fmtDate(previewConv.create_time).d.toLocaleString()} · {previewMsgs.length} {t('messages')}</div>
                   </div>
+                  {matches.length > 0 && (
+                    <div className="pv-results">
+                      {matches.map((mIdx) => (
+                        <button key={mIdx} className="result-pill" onClick={() => jumpToMessage(mIdx)}>
+                          #{mIdx + 1}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div className="pv-body" ref={previewScrollRef}>
-                    {previewFilteredMsgs.map(({ msg, model }, i) => {
+                    {previewMsgsWithModel.map(({ msg, model }, i) => {
                       const role = msg.author?.role || "assistant";
                       const text = extractText(msg);
                       const side = role === "assistant" ? "left" : "right";
                       const displayRole = roleDisplay(role);
+                      const highlight = highlightedIdx === i ? " highlight" : "";
+                      const isMatch = matchSet.has(i) ? " match" : "";
                       return (
-                        <div key={i} className={`msg ${side}`}>
+                        <div
+                          key={i}
+                          className={`msg ${side}${highlight}${isMatch}`}
+                          ref={(el) => {
+                            if (el) messageRefs.current.set(i, el);
+                            else messageRefs.current.delete(i);
+                          }}
+                        >
                           <div className="bubble">
                             <div className="meta-line">
                               <div className="role">{displayRole}</div>
@@ -514,17 +593,24 @@ button.ghost{background:transparent;border-color:rgba(110,46,52,.25);color:var(-
 .pv-head{padding:12px 14px;border-bottom:1px solid rgba(110,46,52,.15)}
 .pv-title{font-weight:600}
 .pv-sub{font-size:12px;color:var(--muted)}
+.pv-results{padding:8px 12px;display:flex;flex-wrap:wrap;gap:6px;border-bottom:1px solid rgba(110,46,52,.08);background:rgba(255,255,255,.6)}
+.pv-results .result-pill{border:1px solid rgba(110,46,52,.25);background:rgba(110,46,52,.06);color:var(--text);padding:4px 8px;border-radius:8px;cursor:pointer;font-size:12px;line-height:1}
+.pv-results .result-pill:hover{border-color:var(--accent)}
 .pv-body{padding:12px 10px;overflow:auto;background:#fff}
 .msg{display:flex;margin:8px 0}
 .msg.left{justify-content:flex-start}
 .msg.right{justify-content:flex-end}
 .msg .bubble{max-width:100%;padding:8px 10px;border-radius:10px;border:1px solid rgba(110,46,52,.2);background:var(--bubble-assist);box-shadow:0 2px 8px rgba(0,0,0,.04)}
 .msg.right .bubble{background:var(--bubble-user)}
+.msg.match .bubble{border-color:var(--accent);box-shadow:0 2px 10px rgba(110,46,52,.12)}
+.msg.highlight .bubble{animation:flash 1s ease-in-out 2}
 .msg .meta-line{display:flex;align-items:center;gap:6px;margin-bottom:4px;flex-wrap:wrap}
 .msg .role{font-size:11px;color:#6E2E34;opacity:.8;margin-bottom:0}
 .msg .model-badge{font-size:11px;color:var(--muted);padding:2px 6px;border-radius:6px;background:rgba(110,46,52,.06);border:1px solid rgba(110,46,52,.15)}
 .msg .text{white-space:pre-wrap;word-break:break-word}
+.msg.highlight .text{color:var(--accent-600)}
 .pv-empty{padding:20px;color:var(--muted)}
+@keyframes flash{0%{background:var(--bubble-assist)}50%{background:#fff6f7}100%{background:var(--bubble-assist)}}
 .foot{margin:16px 0;color:var(--muted);font-size:12px;text-align:center}
 @media (max-width: 1000px){.panel{grid-template-columns:repeat(2,1fr)}.panel .group.rowBtns{grid-column:span 2}}
 @media (max-width: 900px){.split{grid-template-columns:1fr}}
