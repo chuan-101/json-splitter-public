@@ -21,14 +21,15 @@ export default function PreviewPanel({
           </div>
           <div className="pv-body" ref={previewScrollRef}>
             {filteredMessages.map(({ msg, model, idx }) => {
-              const role = msg.author?.role || "assistant";
+              const role = (msg.author?.role || "assistant").toLowerCase();
               const text = msg._text ?? msg.content; // normalizeMessage already called upstream
               const side = role === "assistant" ? "left" : "right";
+              const kind = role === "assistant" ? "assistant" : "user";
               const displayRole = roleDisplay(role);
               return (
                 <div
                   key={idx}
-                  className={`msg ${side}`}
+                  className={`msg ${side} ${kind}`}
                   ref={(el) => {
                     if (el) messageRefs.current.set(idx, el);
                     else messageRefs.current.delete(idx);
