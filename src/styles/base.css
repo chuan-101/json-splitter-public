@@ -847,6 +847,22 @@ button.ghost {
   flex-wrap: wrap;
 }
 
+@media (max-width: 768px) {
+  .toolbar {
+    height: auto;
+  }
+
+  .toolbar .input-deck {
+    gap: 10px;
+  }
+
+  .toolbar .deck-input {
+    height: 48px;
+    flex: none;
+    width: 100%;
+  }
+}
+
 @media (max-width: 760px) {
   .toolbar .input-deck {
     flex-direction: column;
