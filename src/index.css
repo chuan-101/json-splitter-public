@@ -62,6 +62,8 @@ body {
   min-height: 100vh;
   background: radial-gradient(120% 120% at 10% 20%, color-mix(in srgb, var(--shadow-light) 60%, var(--bg-body) 40%), var(--bg-body));
   color: var(--text-primary);
+  scrollbar-color: var(--shadow-dark) var(--bg-body);
+  scrollbar-width: thin;
 }
 
 a {
@@ -70,4 +72,24 @@ a {
 
 #root {
   min-height: 100vh;
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: transparent;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--shadow-dark);
+  border-radius: 10px;
+  border: 3px solid var(--bg-body);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-primary);
 }
