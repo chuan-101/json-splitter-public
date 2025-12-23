@@ -429,86 +429,92 @@ export default function JsonConvoSplitter() {
   return (
     <div className="outer" data-theme={theme}>
       <div className="wrap">
-        <Header t={t} />
+        <div className="control-panel">
+          <Header t={t} />
 
-        <Dropzone onFile={onFile} dragging={dragging} setDragging={setDragging} t={t} />
+          <Dropzone onFile={onFile} dragging={dragging} setDragging={setDragging} t={t} />
 
-        <Toolbar
-          lang={lang}
-          setLang={setLang}
-          theme={theme}
-          setTheme={setTheme}
-          titleQuery={titleQuery}
-          setTitleQuery={setTitleQuery}
-          contentQuery={contentQuery}
-          setContentQuery={setContentQuery}
-          globalSearch={globalSearch}
-          setGlobalSearch={setGlobalSearch}
-          selectAllVisible={selectAllVisible}
-          deselectAllVisible={deselectAllVisible}
-          invertVisible={invertVisible}
-          convosCount={convos.length}
-          visibleCount={visible.length}
-          selectedCount={selected.size}
-          t={t}
-        />
-
-        {stats && <StatsPanel stats={stats} t={t} formatRange={formatRange} />}
-
-        <SettingsPanel
-          roleNameUser={roleNameUser}
-          setRoleNameUser={setRoleNameUser}
-          roleNameAssistant={roleNameAssistant}
-          setRoleNameAssistant={setRoleNameAssistant}
-          roleNameSystem={roleNameSystem}
-          setRoleNameSystem={setRoleNameSystem}
-          filePrefix={filePrefix}
-          setFilePrefix={setFilePrefix}
-          fileSuffix={fileSuffix}
-          setFileSuffix={setFileSuffix}
-          downloadSelected={downloadSelected}
-          downloadZip={downloadZip}
-          selectedSize={selected.size}
-          t={t}
-        />
-
-        {globalSearch && contentQuery.trim() && (
-          <GlobalSearchResults
-            globalMatches={globalMatches}
-            setPreviewIdx={setPreviewIdx}
-            setTargetMessageIdx={setTargetMessageIdx}
+          <Toolbar
+            lang={lang}
+            setLang={setLang}
+            theme={theme}
+            setTheme={setTheme}
+            titleQuery={titleQuery}
+            setTitleQuery={setTitleQuery}
+            contentQuery={contentQuery}
+            setContentQuery={setContentQuery}
+            globalSearch={globalSearch}
+            setGlobalSearch={setGlobalSearch}
+            selectAllVisible={selectAllVisible}
+            deselectAllVisible={deselectAllVisible}
+            invertVisible={invertVisible}
+            convosCount={convos.length}
+            visibleCount={visible.length}
+            selectedCount={selected.size}
             t={t}
           />
-        )}
 
-        {convos.length > 0 && (
-          <div className="split">
-            <ConversationList
-              visible={visible}
-              selected={selected}
-              toggle={toggle}
-              highlight={highlight}
-              previewIdx={previewIdx}
-              downloadOne={downloadOne}
-              buildChain={buildChain}
-              fmtDate={fmtDate}
-              isPreviewMessageVisible={isPreviewMessageVisible}
+          {stats && <StatsPanel stats={stats} t={t} formatRange={formatRange} />}
+
+          <SettingsPanel
+            roleNameUser={roleNameUser}
+            setRoleNameUser={setRoleNameUser}
+            roleNameAssistant={roleNameAssistant}
+            setRoleNameAssistant={setRoleNameAssistant}
+            roleNameSystem={roleNameSystem}
+            setRoleNameSystem={setRoleNameSystem}
+            filePrefix={filePrefix}
+            setFilePrefix={setFilePrefix}
+            fileSuffix={fileSuffix}
+            setFileSuffix={setFileSuffix}
+            downloadSelected={downloadSelected}
+            downloadZip={downloadZip}
+            selectedSize={selected.size}
+            t={t}
+          />
+        </div>
+
+        <div className="panel-slot" aria-hidden />
+
+        <div className="workspace">
+          {globalSearch && contentQuery.trim() && (
+            <GlobalSearchResults
+              globalMatches={globalMatches}
+              setPreviewIdx={setPreviewIdx}
+              setTargetMessageIdx={setTargetMessageIdx}
               t={t}
             />
+          )}
 
-            <PreviewPanel
-              previewConv={previewConv}
-              filteredMessages={filteredPreviewMsgsWithModel}
-              highlightMatches={highlightMatches}
-              roleDisplay={roleDisplay}
-              fmtDate={fmtDate}
-              messageRefs={messageRefs}
-              previewScrollRef={previewScrollRef}
-              nonSystemMessageCount={nonSystemPreviewMsgsWithModel.length}
-              t={t}
-            />
-          </div>
-        )}
+          {convos.length > 0 && (
+            <div className="split">
+              <ConversationList
+                visible={visible}
+                selected={selected}
+                toggle={toggle}
+                highlight={highlight}
+                previewIdx={previewIdx}
+                downloadOne={downloadOne}
+                buildChain={buildChain}
+                fmtDate={fmtDate}
+                isPreviewMessageVisible={isPreviewMessageVisible}
+                t={t}
+              />
+
+              <PreviewPanel
+                previewConv={previewConv}
+                filteredMessages={filteredPreviewMsgsWithModel}
+                highlightMatches={highlightMatches}
+                roleDisplay={roleDisplay}
+                fmtDate={fmtDate}
+                messageRefs={messageRefs}
+                previewScrollRef={previewScrollRef}
+                nonSystemMessageCount={nonSystemPreviewMsgsWithModel.length}
+                t={t}
+              />
+            </div>
+          )}
+        </div>
 
         <footer className="foot">
           <div>{t('privacyNote')}</div>
