@@ -691,7 +691,8 @@ button.ghost {
 
 .msg {
   display: flex;
-  margin: 10px 0;
+  margin: 12px 0;
+  width: 100%;
 }
 
 .msg.left {
@@ -703,19 +704,38 @@ button.ghost {
 }
 
 .msg .bubble {
-  max-width: 100%;
-  padding: 10px 12px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-strong);
+  max-width: 80%;
+  padding: 12px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-soft);
   background: color-mix(in srgb, var(--bg-screen) 85%, var(--shadow-light) 15%);
   box-shadow:
-    inset 8px 8px 14px var(--shadow-dark),
-    inset -8px -8px 14px var(--shadow-light),
-    8px 8px 16px color-mix(in srgb, var(--shadow-dark) 25%, transparent);
+    0 10px 18px color-mix(in srgb, var(--shadow-dark) 30%, transparent),
+    inset 1px 1px 0 color-mix(in srgb, var(--shadow-light) 60%, transparent);
 }
 
-.msg.right .bubble {
-  background: color-mix(in srgb, var(--bg-screen) 75%, var(--shadow-light) 25%);
+.msg.assistant .bubble {
+  border-radius: 20px 20px 20px 6px;
+  background: color-mix(in srgb, #ffffff 90%, var(--bg-body) 10%);
+}
+
+.msg.user .bubble {
+  border-radius: 20px 20px 6px 20px;
+  background: #dce1e8;
+  box-shadow:
+    0 10px 18px color-mix(in srgb, var(--shadow-dark) 35%, transparent),
+    inset 1px 1px 0 color-mix(in srgb, var(--shadow-light) 50%, transparent);
+}
+
+.outer[data-theme="stealth"] .msg.assistant .bubble {
+  background: color-mix(in srgb, var(--bg-body) 75%, var(--shadow-light) 25%);
+}
+
+.outer[data-theme="stealth"] .msg.user .bubble {
+  background: #3a3a3a;
+  box-shadow:
+    0 10px 18px color-mix(in srgb, var(--shadow-dark) 45%, transparent),
+    inset 1px 1px 0 color-mix(in srgb, var(--shadow-light) 40%, transparent);
 }
 
 .msg .meta-line {
