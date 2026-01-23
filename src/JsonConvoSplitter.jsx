@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Header from "./components/Header";
 import Dropzone from "./components/Dropzone";
 import Toolbar from "./components/Toolbar";
@@ -47,6 +47,7 @@ export default function JsonConvoSplitter() {
   const [fileSuffix, setFileSuffix] = useState("");
   const [hideSystemExport, setHideSystemExport] = useState(true);
   const [plainTextExport, setPlainTextExport] = useState(false);
+  const [statsDefaultOpen, setStatsDefaultOpen] = useState(true);
 
   const t = (k) => (translations[lang]?.[k] ?? k);
   const untitledText = t('untitled');
@@ -475,6 +476,19 @@ export default function JsonConvoSplitter() {
     setTargetMessageIdx(null);
   }, [targetMessageIdx]);
 
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return undefined;
+    const media = window.matchMedia("(max-width: 720px)");
+    const update = () => setStatsDefaultOpen(!media.matches);
+    update();
+    if (media.addEventListener) {
+      media.addEventListener("change", update);
+      return () => media.removeEventListener("change", update);
+    }
+    media.addListener(update);
+    return () => media.removeListener(update);
+  }, []);
+
   return (
     <div className="outer" data-theme={theme}>
       <div className="wrap">
@@ -494,16 +508,20 @@ export default function JsonConvoSplitter() {
             setContentQuery={setContentQuery}
             globalSearch={globalSearch}
             setGlobalSearch={setGlobalSearch}
-            selectAllVisible={selectAllVisible}
-            deselectAllVisible={deselectAllVisible}
-            invertVisible={invertVisible}
             convosCount={convos.length}
             visibleCount={visible.length}
             selectedCount={selected.size}
             t={t}
           />
 
-          {stats && <StatsPanel stats={stats} t={t} formatRange={formatRange} />}
+          {stats && (
+            <StatsPanel
+              stats={stats}
+              t={t}
+              formatRange={formatRange}
+              defaultOpen={statsDefaultOpen}
+            />
+          )}
 
           <SettingsPanel
             roleNameUser={roleNameUser}
@@ -522,6 +540,9 @@ export default function JsonConvoSplitter() {
             setPlainTextExport={setPlainTextExport}
             downloadSelected={downloadSelected}
             downloadZip={downloadZip}
+            selectAllVisible={selectAllVisible}
+            deselectAllVisible={deselectAllVisible}
+            invertVisible={invertVisible}
             selectedSize={selected.size}
             t={t}
           />

@@ -1,10 +1,11 @@
 import React from "react";
 
-export default function StatsPanel({ stats, t, formatRange }) {
+export default function StatsPanel({ stats, t, formatRange, defaultOpen = true }) {
   if (!stats) return null;
 
   return (
-    <div className="stats-panel device-panel">
+    <details className="stats-panel device-panel" open={defaultOpen}>
+      <summary className="stats-summary">{t('statsSummary')}</summary>
       <div className="primary-screens">
         <div className="primary-display deep">
           <div className="display-label">Window Count</div>
@@ -62,6 +63,6 @@ export default function StatsPanel({ stats, t, formatRange }) {
           </div>
         </div>
       </details>
-    </div>
+    </details>
   );
 }
