@@ -38,6 +38,8 @@
   "filePrefix": "文件名前缀",
   "fileSuffix": "文件名后缀",
   "optional": "可留空",
+  "exportHideSystem": "隐藏系统/工具消息",
+  "exportPlainText": "仅导出纯文本",
   "downloadSel": "下载所选",
   "downloadZip": "打包 ZIP",
   "downloadOne": "单独下载",
