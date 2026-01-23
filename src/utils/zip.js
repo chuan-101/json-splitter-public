@@ -31,20 +31,23 @@ export const makeZip = async (files) => {
   const central = [];
   let offset = 0;
   const enc = new TextEncoder();
+  const GPBF_UTF8 = 0x0800;
+  const VERSION_NEEDED = 20;
+  const VERSION_MADE_BY = 20;
   for (const f of files) {
     const nameBytes = enc.encode(f.name);
     const data = f.data;
     const crc = crc32(data);
     const hdr = [
-      le32(0x04034b50), le16(20), le16(0), le16(0), le16(0), le16(0),
+      le32(0x04034b50), le16(VERSION_NEEDED), le16(GPBF_UTF8), le16(0), le16(0), le16(0),
       le32(crc), le32(data.length), le32(data.length), le16(nameBytes.length), le16(0)
     ];
     const local = concatBytes([...hdr, nameBytes, data]);
     chunks.push(local);
     const cenHdr = [
-      le32(0x02014b50), le16(20), le16(20), le16(0), le16(0), le16(0), le16(0),
+      le32(0x02014b50), le16(VERSION_MADE_BY), le16(VERSION_NEEDED), le16(GPBF_UTF8), le16(0), le16(0), le16(0),
       le32(crc), le32(data.length), le32(data.length), le16(nameBytes.length), le16(0), le16(0), le16(0), le16(0),
-      le32(offset)
+      le32(0), le32(offset)
     ];
     central.push(concatBytes([...cenHdr, nameBytes]));
     offset += local.length;
