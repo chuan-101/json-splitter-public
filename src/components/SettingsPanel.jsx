@@ -11,6 +11,10 @@ export default function SettingsPanel({
   setFilePrefix,
   fileSuffix,
   setFileSuffix,
+  hideSystemExport,
+  setHideSystemExport,
+  plainTextExport,
+  setPlainTextExport,
   downloadSelected,
   downloadZip,
   selectedSize,
@@ -40,6 +44,24 @@ export default function SettingsPanel({
           <input className="input" value={fileSuffix} onChange={(e)=>setFileSuffix(e.target.value)} placeholder={t('optional')} />
         </div>
         <div className="deck-actions">
+          <div className="export-options">
+            <label className="export-option">
+              <input
+                type="checkbox"
+                checked={hideSystemExport}
+                onChange={(e) => setHideSystemExport(e.target.checked)}
+              />
+              <span>{t('exportHideSystem')}</span>
+            </label>
+            <label className="export-option">
+              <input
+                type="checkbox"
+                checked={plainTextExport}
+                onChange={(e) => setPlainTextExport(e.target.checked)}
+              />
+              <span>{t('exportPlainText')}</span>
+            </label>
+          </div>
           <button className="primary" disabled={!selectedSize} onClick={downloadSelected}>{t('downloadSel')}</button>
           <button className="primary" disabled={!selectedSize} onClick={downloadZip}>{t('downloadZip')}</button>
         </div>
