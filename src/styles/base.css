@@ -335,10 +335,28 @@ button.ghost {
 }
 
 .deck-row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-row {
+  display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+  align-items: center;
+}
+
+.settings-row-inputs {
   align-items: end;
+}
+
+.settings-row-inputs .group.inline {
+  flex: 1 1 160px;
+}
+
+.settings-row-actions {
+  justify-content: space-between;
 }
 
 .deck-row .group.inline {
@@ -358,9 +376,9 @@ button.ghost {
 }
 
 .deck-actions {
-  margin-left: auto;
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
 }
@@ -405,6 +423,13 @@ button.ghost {
   list-style: none;
 }
 
+.stats-summary .summary-chevron {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--text-primary) 75%, var(--shadow-dark) 25%);
+  display: inline-flex;
+  transition: transform 0.2s ease;
+}
+
 .stats-panel > summary.stats-summary::marker,
 .stats-panel > summary.stats-summary::-webkit-details-marker {
   display: none;
@@ -412,6 +437,10 @@ button.ghost {
 
 .stats-panel[open] > summary.stats-summary {
   margin-bottom: 12px;
+}
+
+.stats-panel[open] > summary.stats-summary .summary-chevron {
+  transform: rotate(90deg);
 }
 
 .primary-screens {
@@ -872,8 +901,9 @@ button.ghost {
 }
 
 @media (max-width: 1000px) {
-  .deck-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .deck-actions { grid-column: span 2; justify-content: flex-start; }
+  .settings-row-actions {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 900px) {
@@ -939,8 +969,7 @@ button.ghost {
   .toolbar .toolbar-controls { flex-wrap: wrap; row-gap: 8px; }
   .toolbar .deck-input { width: 100%; }
   .toolbar .action-buttons { justify-content: flex-start; }
-  .deck-row { grid-template-columns: 1fr; }
-  .deck-actions { grid-column: auto; justify-content: flex-start; flex-wrap: wrap; }
+  .deck-actions { justify-content: flex-start; }
 }
 
 @media (max-width: 420px) {

@@ -5,7 +5,10 @@ export default function StatsPanel({ stats, t, formatRange, defaultOpen = true }
 
   return (
     <details className="stats-panel device-panel" open={defaultOpen}>
-      <summary className="stats-summary">{t('statsSummary')}</summary>
+      <summary className="stats-summary">
+        <span className="summary-chevron" aria-hidden="true">▸</span>
+        <span>{t('statsSummary')}</span>
+      </summary>
       <div className="primary-screens">
         <div className="primary-display deep">
           <div className="display-label">Window Count</div>
