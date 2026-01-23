@@ -26,27 +26,29 @@ export default function SettingsPanel({
   return (
     <div className="settings-deck">
       <div className="deck-row">
-        <div className="group inline">
-          <label>{t('roleUser')}</label>
-          <input className="input" value={roleNameUser} onChange={(e)=>setRoleNameUser(e.target.value)} />
+        <div className="settings-row settings-row-inputs">
+          <div className="group inline">
+            <label>{t('roleUser')}</label>
+            <input className="input" value={roleNameUser} onChange={(e)=>setRoleNameUser(e.target.value)} />
+          </div>
+          <div className="group inline">
+            <label>{t('roleAssistant')}</label>
+            <input className="input" value={roleNameAssistant} onChange={(e)=>setRoleNameAssistant(e.target.value)} />
+          </div>
+          <div className="group inline">
+            <label>{t('roleSystem')}</label>
+            <input className="input" value={roleNameSystem} onChange={(e)=>setRoleNameSystem(e.target.value)} />
+          </div>
+          <div className="group inline slim">
+            <label>{t('filePrefix')}</label>
+            <input className="input" value={filePrefix} onChange={(e)=>setFilePrefix(e.target.value)} placeholder={t('optional')} />
+          </div>
+          <div className="group inline slim">
+            <label>{t('fileSuffix')}</label>
+            <input className="input" value={fileSuffix} onChange={(e)=>setFileSuffix(e.target.value)} placeholder={t('optional')} />
+          </div>
         </div>
-        <div className="group inline">
-          <label>{t('roleAssistant')}</label>
-          <input className="input" value={roleNameAssistant} onChange={(e)=>setRoleNameAssistant(e.target.value)} />
-        </div>
-        <div className="group inline">
-          <label>{t('roleSystem')}</label>
-          <input className="input" value={roleNameSystem} onChange={(e)=>setRoleNameSystem(e.target.value)} />
-        </div>
-        <div className="group inline slim">
-          <label>{t('filePrefix')}</label>
-          <input className="input" value={filePrefix} onChange={(e)=>setFilePrefix(e.target.value)} placeholder={t('optional')} />
-        </div>
-        <div className="group inline slim">
-          <label>{t('fileSuffix')}</label>
-          <input className="input" value={fileSuffix} onChange={(e)=>setFileSuffix(e.target.value)} placeholder={t('optional')} />
-        </div>
-        <div className="deck-actions">
+        <div className="settings-row settings-row-actions">
           <div className="export-options">
             <label className="export-option">
               <input
@@ -65,11 +67,13 @@ export default function SettingsPanel({
               <span>{t('exportPlainText')}</span>
             </label>
           </div>
-          <button className="ghost" onClick={selectAllVisible}>{t('selectAll')}</button>
-          <button className="ghost" onClick={deselectAllVisible}>{t('deselectAll')}</button>
-          <button className="ghost" onClick={invertVisible}>{t('invert')}</button>
-          <button className="primary" disabled={!selectedSize} onClick={downloadSelected}>{t('downloadSel')}</button>
-          <button className="primary" disabled={!selectedSize} onClick={downloadZip}>{t('downloadZip')}</button>
+          <div className="deck-actions">
+            <button className="ghost" onClick={selectAllVisible}>{t('selectAll')}</button>
+            <button className="ghost" onClick={deselectAllVisible}>{t('deselectAll')}</button>
+            <button className="ghost" onClick={invertVisible}>{t('invert')}</button>
+            <button className="primary" disabled={!selectedSize} onClick={downloadSelected}>{t('downloadSel')}</button>
+            <button className="primary" disabled={!selectedSize} onClick={downloadZip}>{t('downloadZip')}</button>
+          </div>
         </div>
       </div>
     </div>
