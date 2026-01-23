@@ -208,7 +208,8 @@ export default function JsonConvoSplitter() {
   const downloadOne = (idx) => {
     const conv = convos[idx];
     const filename = makeFileName(conv);
-    const blob = new Blob([toMarkdown(conv)], { type: "text/markdown" });
+    const content = `\ufeff${toMarkdown(conv)}`;
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
     triggerDownload(blob, filename);
   };
   const downloadSelected = () => { if (!selected.size) return; [...selected].sort((a,b)=>a-b).forEach(downloadOne); };
@@ -218,7 +219,7 @@ export default function JsonConvoSplitter() {
     const files = [...selected].sort((a,b)=>a-b).map(i => {
       const conv = convos[i];
       const name = makeFileName(conv);
-      const data = enc.encode(toMarkdown(conv));
+      const data = enc.encode(`\ufeff${toMarkdown(conv)}`);
       return { name, data };
     });
     const zip = await makeZip(files);
