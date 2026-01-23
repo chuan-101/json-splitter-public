@@ -45,6 +45,8 @@ export default function JsonConvoSplitter() {
   // Filename controls
   const [filePrefix, setFilePrefix] = useState("");
   const [fileSuffix, setFileSuffix] = useState("");
+  const [hideSystemExport, setHideSystemExport] = useState(true);
+  const [plainTextExport, setPlainTextExport] = useState(false);
 
   const t = (k) => (translations[lang]?.[k] ?? k);
   const untitledText = t('untitled');
@@ -87,6 +89,26 @@ export default function JsonConvoSplitter() {
     if (!text || text === "[object Object]") return "";
     return text;
   }, [safeStringify]);
+
+  const exportExtractText = useCallback((message) => {
+    const content = message?.content;
+    if (typeof content === "string") return content;
+    if (content && typeof content === "object" && typeof content.text === "string") return content.text;
+    if (content && typeof content === "object" && Array.isArray(content.parts)) {
+      return content.parts.filter((part) => typeof part === "string").join("\n");
+    }
+    if (Array.isArray(content)) {
+      return content
+        .map((part) => {
+          if (typeof part === "string") return part;
+          if (part && typeof part === "object" && typeof part.text === "string") return part.text;
+          return "";
+        })
+        .filter(Boolean)
+        .join("\n");
+    }
+    return "";
+  }, []);
 
   const normalizeMessage = useCallback((msg) => {
     if (!msg) return "";
@@ -146,17 +168,43 @@ export default function JsonConvoSplitter() {
 
   const formatRange = (range) => (range ? `${range.start} \u2192 ${range.end}` : "");
 
-  const toMarkdown = (conv) => {
+  const shouldExportMessage = useCallback((msg, opts) => {
+    const role = (msg?.author?.role || "assistant").toLowerCase();
+    const text = exportExtractText(msg);
+    const trimmed = text.trim();
+    if (!trimmed) return false;
+    if (opts.hideSystem && ["system", "tool", "function"].includes(role)) return false;
+    if (opts.hideSystem && trimmed.trimStart().startsWith('{"')) return false;
+    return true;
+  }, [exportExtractText]);
+
+  const toMarkdown = useCallback((conv, opts = {}) => {
+    const exportOpts = {
+      hideSystem: true,
+      plainTextOnly: false,
+      includeRoleLabels: false,
+      ...opts,
+    };
     const chain = buildChain(conv);
     return chain
+      .filter((m) => shouldExportMessage(m, exportOpts))
       .map((m) => {
         const role = m.author?.role || "assistant";
-        const text = normalizeMessage(m);
+        const text = exportExtractText(m);
         const displayRole = roleDisplay(role);
+        if (exportOpts.plainTextOnly) {
+          return exportOpts.includeRoleLabels ? `${displayRole}: ${text}` : text;
+        }
         return `**${displayRole}**:\n${text}`;
       })
       .join("\n\n\n");
-  };
+  }, [buildChain, exportExtractText, roleDisplay, shouldExportMessage]);
+
+  const exportOptions = useMemo(() => ({
+    hideSystem: hideSystemExport,
+    plainTextOnly: plainTextExport,
+    includeRoleLabels: false,
+  }), [hideSystemExport, plainTextExport]);
 
   // ---------- Events ----------
   const onFile = async (file) => {
@@ -208,7 +256,7 @@ export default function JsonConvoSplitter() {
   const downloadOne = (idx) => {
     const conv = convos[idx];
     const filename = makeFileName(conv);
-    const content = `\ufeff${toMarkdown(conv)}`;
+    const content = `\ufeff${toMarkdown(conv, exportOptions)}`;
     const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
     triggerDownload(blob, filename);
   };
@@ -219,7 +267,7 @@ export default function JsonConvoSplitter() {
     const files = [...selected].sort((a,b)=>a-b).map(i => {
       const conv = convos[i];
       const name = makeFileName(conv);
-      const data = enc.encode(`\ufeff${toMarkdown(conv)}`);
+      const data = enc.encode(`\ufeff${toMarkdown(conv, exportOptions)}`);
       return { name, data };
     });
     const zip = await makeZip(files);
@@ -468,6 +516,10 @@ export default function JsonConvoSplitter() {
             setFilePrefix={setFilePrefix}
             fileSuffix={fileSuffix}
             setFileSuffix={setFileSuffix}
+            hideSystemExport={hideSystemExport}
+            setHideSystemExport={setHideSystemExport}
+            plainTextExport={plainTextExport}
+            setPlainTextExport={setPlainTextExport}
             downloadSelected={downloadSelected}
             downloadZip={downloadZip}
             selectedSize={selected.size}

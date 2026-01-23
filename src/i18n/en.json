@@ -38,6 +38,8 @@
   "filePrefix": "Filename prefix",
   "fileSuffix": "Filename suffix",
   "optional": "optional",
+  "exportHideSystem": "Hide system/tool messages",
+  "exportPlainText": "Plain text only",
   "downloadSel": "Download Selected",
   "downloadZip": "ZIP Selected",
   "downloadOne": "Download",
