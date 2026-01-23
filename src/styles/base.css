@@ -395,6 +395,25 @@ button.ghost {
     10px 10px 18px color-mix(in srgb, var(--shadow-dark) 32%, transparent);
 }
 
+.stats-panel > summary.stats-summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+}
+
+.stats-panel > summary.stats-summary::marker,
+.stats-panel > summary.stats-summary::-webkit-details-marker {
+  display: none;
+}
+
+.stats-panel[open] > summary.stats-summary {
+  margin-bottom: 12px;
+}
+
 .primary-screens {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

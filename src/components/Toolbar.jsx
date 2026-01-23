@@ -11,9 +11,6 @@ export default function Toolbar({
   setContentQuery,
   globalSearch,
   setGlobalSearch,
-  selectAllVisible,
-  deselectAllVisible,
-  invertVisible,
   convosCount,
   visibleCount,
   selectedCount,
@@ -62,11 +59,6 @@ export default function Toolbar({
       </div>
       <div className="toolbar-row action-deck">
         <div className="stats">{t('total')} <b>{convosCount}</b> · {t('shown')} <b>{visibleCount}</b> · {t('selected')} <b>{selectedCount}</b></div>
-        <div className="action-buttons">
-          <button onClick={selectAllVisible}>{t('selectAll')}</button>
-          <button onClick={deselectAllVisible}>{t('deselectAll')}</button>
-          <button onClick={invertVisible}>{t('invert')}</button>
-        </div>
       </div>
     </div>
   );

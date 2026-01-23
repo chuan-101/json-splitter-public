@@ -17,6 +17,9 @@ export default function SettingsPanel({
   setPlainTextExport,
   downloadSelected,
   downloadZip,
+  selectAllVisible,
+  deselectAllVisible,
+  invertVisible,
   selectedSize,
   t,
 }) {
@@ -62,6 +65,9 @@ export default function SettingsPanel({
               <span>{t('exportPlainText')}</span>
             </label>
           </div>
+          <button className="ghost" onClick={selectAllVisible}>{t('selectAll')}</button>
+          <button className="ghost" onClick={deselectAllVisible}>{t('deselectAll')}</button>
+          <button className="ghost" onClick={invertVisible}>{t('invert')}</button>
           <button className="primary" disabled={!selectedSize} onClick={downloadSelected}>{t('downloadSel')}</button>
           <button className="primary" disabled={!selectedSize} onClick={downloadZip}>{t('downloadZip')}</button>
         </div>
