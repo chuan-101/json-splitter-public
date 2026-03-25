@@ -89,26 +89,6 @@ export default function JsonConvoSplitter() {
     const text = out.join("\n").trim();
     if (!text || text === "[object Object]") return "";
     return text;
-  }, [safeStringify]);
-
-  const exportExtractText = useCallback((message) => {
-    const content = message?.content;
-    if (typeof content === "string") return content;
-    if (content && typeof content === "object" && typeof content.text === "string") return content.text;
-    if (content && typeof content === "object" && Array.isArray(content.parts)) {
-      return content.parts.filter((part) => typeof part === "string").join("\n");
-    }
-    if (Array.isArray(content)) {
-      return content
-        .map((part) => {
-          if (typeof part === "string") return part;
-          if (part && typeof part === "object" && typeof part.text === "string") return part.text;
-          return "";
-        })
-        .filter(Boolean)
-        .join("\n");
-    }
-    return "";
   }, []);
 
   const normalizeMessage = useCallback((msg) => {
@@ -118,19 +98,6 @@ export default function JsonConvoSplitter() {
     }
     return msg._text;
   }, [extractMessageText]);
-
-  const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const highlightMatches = useCallback((text) => {
-    const q = contentQuery.trim();
-    const source = text == null ? "" : String(text);
-    if (!q) return source;
-    const regex = new RegExp(`(${escapeRegExp(q)})`, "gi");
-    return source
-      .split(regex)
-      .map((part, idx) =>
-        idx % 2 === 1 ? <mark key={idx} className="highlight-match">{part}</mark> : part
-      );
-  }, [contentQuery]);
 
   const buildChain = useCallback((conv) => {
     const chain = [];
@@ -160,24 +127,24 @@ export default function JsonConvoSplitter() {
     return model ? model.trim() : "Unknown";
   }, []);
 
-  const roleDisplay = (role) => {
+  const roleDisplay = useCallback((role) => {
     const r = (role || "assistant").toLowerCase();
     if (r === "user") return roleNameUser;
     if (r === "system") return roleNameSystem;
     return roleNameAssistant; // assistant/tool/function 都归为助手侧显示
-  };
+  }, [roleNameAssistant, roleNameSystem, roleNameUser]);
 
   const formatRange = (range) => (range ? `${range.start} \u2192 ${range.end}` : "");
 
   const shouldExportMessage = useCallback((msg, opts) => {
     const role = (msg?.author?.role || "assistant").toLowerCase();
-    const text = exportExtractText(msg);
+    const text = normalizeMessage(msg);
     const trimmed = text.trim();
     if (!trimmed) return false;
     if (opts.hideSystem && ["system", "tool", "function"].includes(role)) return false;
     if (opts.hideSystem && trimmed.trimStart().startsWith('{"')) return false;
     return true;
-  }, [exportExtractText]);
+  }, [normalizeMessage]);
 
   const toMarkdown = useCallback((conv, opts = {}) => {
     const exportOpts = {
@@ -191,7 +158,7 @@ export default function JsonConvoSplitter() {
       .filter((m) => shouldExportMessage(m, exportOpts))
       .map((m) => {
         const role = m.author?.role || "assistant";
-        const text = exportExtractText(m);
+        const text = normalizeMessage(m);
         const displayRole = roleDisplay(role);
         if (exportOpts.plainTextOnly) {
           return exportOpts.includeRoleLabels ? `${displayRole}: ${text}` : text;
@@ -199,7 +166,7 @@ export default function JsonConvoSplitter() {
         return `**${displayRole}**:\n${text}`;
       })
       .join("\n\n\n");
-  }, [buildChain, exportExtractText, roleDisplay, shouldExportMessage]);
+  }, [buildChain, normalizeMessage, roleDisplay, shouldExportMessage]);
 
   const exportOptions = useMemo(() => ({
     hideSystem: hideSystemExport,
@@ -578,7 +545,6 @@ export default function JsonConvoSplitter() {
               <PreviewPanel
                 previewConv={previewConv}
                 filteredMessages={filteredPreviewMsgsWithModel}
-                highlightMatches={highlightMatches}
                 roleDisplay={roleDisplay}
                 fmtDate={fmtDate}
                 messageRefs={messageRefs}
