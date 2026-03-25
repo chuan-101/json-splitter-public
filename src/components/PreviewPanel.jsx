@@ -1,5 +1,6 @@
 import React from "react";
-import SafeMarkdown from "./SafeMarkdown";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export default function PreviewPanel({
   previewConv,
@@ -41,7 +42,7 @@ export default function PreviewPanel({
                       <span className="model-badge">{model}</span>
                     </div>
                     <div className="text markdown-content">
-                      <SafeMarkdown content={text == null ? "" : String(text)} />
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text == null ? "" : String(text)}</ReactMarkdown>
                     </div>
                   </div>
                 </div>
