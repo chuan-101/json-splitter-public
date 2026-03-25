@@ -1,9 +1,9 @@
 import React from "react";
+import SafeMarkdown from "./SafeMarkdown";
 
 export default function PreviewPanel({
   previewConv,
   filteredMessages,
-  highlightMatches,
   roleDisplay,
   fmtDate,
   messageRefs,
@@ -22,7 +22,7 @@ export default function PreviewPanel({
           <div className="pv-body" ref={previewScrollRef}>
             {filteredMessages.map(({ msg, model, idx }) => {
               const role = (msg.author?.role || "assistant").toLowerCase();
-              const text = msg._text ?? msg.content; // normalizeMessage already called upstream
+              const text = msg._text ?? msg.content;
               const side = role === "assistant" ? "left" : "right";
               const kind = role === "assistant" ? "assistant" : "user";
               const displayRole = roleDisplay(role);
@@ -40,7 +40,9 @@ export default function PreviewPanel({
                       <div className="role">{displayRole}</div>
                       <span className="model-badge">{model}</span>
                     </div>
-                    <div className="text">{highlightMatches(text)}</div>
+                    <div className="text markdown-content">
+                      <SafeMarkdown content={text == null ? "" : String(text)} />
+                    </div>
                   </div>
                 </div>
               );
